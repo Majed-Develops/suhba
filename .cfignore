@@ -1,0 +1,8 @@
+server/
+pyproject.toml
+poetry.lock
+*.py
+__pycache__/
+.env
+venv/
+.venv/
