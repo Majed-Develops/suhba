@@ -10,11 +10,11 @@
   
   const t = $derived(translations[$currentLanguage.code]);
   
-  let authMode: 'login' | 'signup' = 'login';
-  let loginMethod: 'google' | 'email' | 'phone' = 'google';
-  let email = '';
-  let phone = '';
-  let password = '';
+  let authMode = $state<'login' | 'signup'>('login');
+  let loginMethod = $state<'google' | 'email' | 'phone'>('google');
+  let email = $state('');
+  let phone = $state('');
+  let password = $state('');
   
   function handleGoogleLogin() {
     // Implement Google login logic here

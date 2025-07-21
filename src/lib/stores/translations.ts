@@ -10,6 +10,11 @@ export const translations = {
     language: 'Language',
     theme: 'Theme',
     
+    // Theme Names
+    themeDesert: 'Daylight',
+    themeScroll: 'Antique',
+    themeMidnight: 'Midnight',
+    
     // App Title & Tagline
     appTitle: 'Suhba',
     appTagline: 'A gathering of knowledge and companionship',
@@ -22,8 +27,10 @@ export const translations = {
     chooseGameMode: 'Choose Game Mode',
     soloPlay: 'Solo Play',
     teamPlay: 'Team Play',
+    suhbaMode: 'Suhba Mode',
     soloDescription: 'Test your Islamic knowledge individually and track your personal progress',
     teamDescription: 'Play with friends and family, take turns, and compete with scoring',
+    suhbaDescription: 'Play together with friends and family',
     
     // Team Setup
     teamSetup: 'Team Setup',
@@ -51,6 +58,18 @@ export const translations = {
     
     // Games
     chooseYourGame: 'Choose Your Game',
+    
+    // Main Games
+    fiqhMaster: 'Fiqh Master',
+    wisdomSeeker: 'Wisdom Seeker', 
+    chroniclesOfFaith: 'Chronicles of Faith',
+    hangman: 'Guess the Islamic Figure',
+    tilawahTrail: 'Tilawah Trail',
+    seerahScenarios: 'Seerah Scenarios',
+    hadithLab: 'The Hadith Lab',
+    pillarFoundations: 'Pillar Foundations',
+    seerahTrip: 'Seerah Trip',
+    imanDefender: 'Iman Defender',
     
     // New Games
     meccanMedinan: 'Meccan & Medinan',
@@ -130,6 +149,40 @@ export const translations = {
     matchCorrectly: 'Match each item with its correct pair',
     fillInBlanks: 'Fill in the missing words',
     listenAndIdentify: 'Listen to the audio and identify',
+    
+    // Difficulty levels
+    easy: 'Easy',
+    medium: 'Medium',
+    hard: 'Hard',
+    chooseDifficulty: 'Choose Your Difficulty Level',
+    perfectForBeginners: 'Perfect for beginners',
+    balancedChallenge: 'Balanced challenge',
+    expertLevel: 'Expert level',
+    basicQuestions: 'Basic questions',
+    pointsPerCorrectAnswer5: '5 points per correct answer',
+    greatForLearning: 'Great for learning',
+    intermediateQuestions: 'Intermediate questions',
+    pointsPerCorrectAnswer10: '10 points per correct answer',
+    goodForPractice: 'Good for practice',
+    advancedQuestions: 'Advanced questions',
+    pointsPerCorrectAnswer15: '15 points per correct answer',
+    testYourKnowledge: 'Test your knowledge',
+    
+    // Tafsir moment specific translations
+    relatedHadith: 'Related Hadith',
+    explanation: 'Explanation',
+    question: 'Question',
+    options: 'Options',
+    answer: 'Answer',
+    correctAnswer: 'Correct Answer',
+    wrongAnswer: 'Wrong Answer',
+    yourAnswer: 'Your Answer',
+    continueReading: 'Continue Reading',
+    moment: 'Moment',
+    tafsir: 'Tafsir',
+    tafsirMoment: 'Tafsir Moment',
+    pause: 'Pause',
+    resume: 'Resume',
   },
   
   ar: {
@@ -143,6 +196,11 @@ export const translations = {
     language: 'اللغة',
     theme: 'المظهر',
     
+    // Theme Names
+    themeDesert: 'نهار',
+    themeScroll: 'أثري',
+    themeMidnight: 'منتصف الليل',
+    
     // App Title & Tagline
     appTitle: 'صحبة',
     appTagline: 'مجلس للعلم والصحبة',
@@ -155,8 +213,10 @@ export const translations = {
     chooseGameMode: 'اختر نمط اللعبة',
     soloPlay: 'لعب فردي',
     teamPlay: 'لعب جماعي',
+    suhbaMode: 'وضع الصحبة',
     soloDescription: 'اختبر معرفتك الإسلامية بشكل فردي وتتبع تقدمك الشخصي',
     teamDescription: 'العب مع الأصدقاء والعائلة، تناوبوا، وتنافسوا بالنقاط',
+    suhbaDescription: 'العب مع الأصدقاء والعائلة',
     
     // Team Setup
     teamSetup: 'إعداد الفريق',
@@ -184,6 +244,18 @@ export const translations = {
     
     // Games
     chooseYourGame: 'اختر لعبتك',
+    
+    // Main Games
+    fiqhMaster: 'سيد الفقه',
+    wisdomSeeker: 'باحث عن الحكمة',
+    chroniclesOfFaith: 'سجلات الإيمان',
+    hangman: 'خمن الشخصية الإسلامية',
+    tilawahTrail: 'مسار التلاوة',
+    seerahScenarios: 'مواقف من السيرة',
+    hadithLab: 'مختبر الحديث',
+    pillarFoundations: 'أساس الأركان',
+    seerahTrip: 'رحلة السيرة',
+    imanDefender: 'مدافع الإيمان',
     
     // New Games
     meccanMedinan: 'مكي ومدني',
@@ -263,5 +335,39 @@ export const translations = {
     matchCorrectly: 'اربط كل عنصر بالعنصر الصحيح المقابل',
     fillInBlanks: 'املأ الكلمات المفقودة',
     listenAndIdentify: 'استمع للصوت وحدد',
+    
+    // Difficulty levels
+    easy: 'سهل',
+    medium: 'متوسط',
+    hard: 'صعب',
+    chooseDifficulty: 'اختر مستوى الصعوبة',
+    perfectForBeginners: 'مثالي للمبتدئين',
+    balancedChallenge: 'تحدي متوازن',
+    expertLevel: 'مستوى الخبراء',
+    basicQuestions: 'أسئلة أساسية',
+    pointsPerCorrectAnswer5: '5 نقاط لكل إجابة صحيحة',
+    greatForLearning: 'رائع للتعلم',
+    intermediateQuestions: 'أسئلة متوسطة',
+    pointsPerCorrectAnswer10: '10 نقاط لكل إجابة صحيحة',
+    goodForPractice: 'جيد للممارسة',
+    advancedQuestions: 'أسئلة متقدمة',
+    pointsPerCorrectAnswer15: '15 نقطة لكل إجابة صحيحة',
+    testYourKnowledge: 'اختبر معرفتك',
+    
+    // Tafsir moment specific translations
+    relatedHadith: 'الحديث ذو الصلة',
+    explanation: 'الشرح',
+    question: 'السؤال',
+    options: 'الخيارات',
+    answer: 'الإجابة',
+    correctAnswer: 'الإجابة الصحيحة',
+    wrongAnswer: 'الإجابة الخاطئة',
+    yourAnswer: 'إجابتك',
+    continueReading: 'تابع القراءة',
+    moment: 'لحظة',
+    tafsir: 'تفسير',
+    tafsirMoment: 'لحظة تفسير',
+    pause: 'توقف',
+    resume: 'استئناف',
   }
 };

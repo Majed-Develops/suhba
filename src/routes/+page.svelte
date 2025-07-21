@@ -1,21 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { 
-    Book, User, Settings, Play, MessageCircle, ArrowLeft, 
+    Book, User, Settings, Play, Pause, MessageCircle, ArrowLeft, 
     Check, Heart, Zap, Shield, Star, Crown, Users, Clock, 
     Trophy, RotateCcw, Lightbulb, SkipForward, Moon, Sun, 
     Scroll, Calendar, Scale, Sparkles, Plus, UserCheck, 
     Compass, Target, FileText, Volume2, BookOpen, List, 
-    UserPlus, Globe, Shuffle, Coffee, Building, Sunrise, 
+    UserPlus, Globe, Shuffle, 
     Cog, Settings2, Wrench, ChevronLeft, ChevronRight, CornerUpLeft,
     History, Link, Layers
   } from 'lucide-svelte';
   import { currentLanguage } from '$lib/stores/language';
   import { translations } from '$lib/stores/translations';
   import { newGameContent, getQuestionNames } from '$lib/gameContent';
+  import { wsManager, connectionState, roomState } from '$lib/stores/websocket';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
   import AuthModal from '$lib/components/AuthModal.svelte';
   import SalahTimer from '$lib/components/SalahTimer.svelte';
+  import SuhbaLogo from '$lib/components/SuhbaLogo.svelte';
+  import UserShmagh from '$lib/components/UserShmagh.svelte';
+  import UserGlasses from '$lib/components/UserGlasses.svelte';
+  import UserKeffiyeh from '$lib/components/UserKeffiyeh.svelte';
+  import SeerahTrip from '$lib/components/SeerahTrip.svelte';
 
   // Reactive state using Svelte 5 runes
   let currentScreen = $state('home');
@@ -23,6 +29,10 @@
   let score = $state(0);
   let round = $state(1);
   let isFlipped = $state(false);
+  
+  // Generate a unique client ID for debugging
+  const clientId = Math.random().toString(36).substring(2, 8).toUpperCase();
+  console.log('🆔 Client ID:', clientId);
   let theme = $state('desert');
   let chillCategory = $state(null);
   
@@ -31,6 +41,8 @@
   let players = $state([]);
   let currentPlayer = $state(0);
   let teamScores = $state({});
+  let selectedDifficulty = $state('medium'); // Default to medium
+  let previousScreen = $state('modeSelector'); // Track navigation history
   
   // New states for modals and UI
   let showSettings = $state(false);
@@ -41,12 +53,14 @@
   let roomPlayers = $state([]);
   let showCopyMessage = $state(false);
   
-  // Language and translations  
-  const t = $derived(translations[$currentLanguage?.code || 'en']);
+  // Language and translations - simplified to avoid store conflicts
+  const t = $derived((translations && translations[$currentLanguage.code]) ? translations[$currentLanguage.code] : {});
   
-  // Initialize language store
+  // Initialize app
   onMount(() => {
+    // Initialize language store
     currentLanguage.init();
+    
     // Load theme from localStorage
     const savedTheme = localStorage.getItem('suhba-theme');
     if (savedTheme) {
@@ -152,31 +166,42 @@
     ]
   };
 
-  const gameTypes = [
+  // Game types with translation keys
+  const gameTypesBase = [
     // The Main Games
-    { id: 'fiqhMaster', name: 'Fiqh Master', icon: Scale, gradient: 'from-emerald-400 via-teal-400 to-cyan-400', shadow: 'shadow-emerald-500/25' },
-    { id: 'wisdomSeeker', name: 'Wisdom Seeker', icon: Lightbulb, gradient: 'from-blue-400 via-indigo-400 to-purple-400', shadow: 'shadow-blue-500/25' },
-    { id: 'chroniclesOfFaith', name: 'Chronicles of Faith', icon: Scroll, gradient: 'from-amber-400 via-orange-400 to-red-400', shadow: 'shadow-amber-500/25' },
+    { id: 'fiqhMaster', nameKey: 'fiqhMaster', icon: Scale, gradient: 'from-emerald-400 via-teal-400 to-cyan-400', shadow: 'shadow-emerald-500/25' },
+    { id: 'wisdomSeeker', nameKey: 'wisdomSeeker', icon: Lightbulb, gradient: 'from-blue-400 via-indigo-400 to-purple-400', shadow: 'shadow-blue-500/25' },
+    { id: 'chroniclesOfFaith', nameKey: 'chroniclesOfFaith', icon: Scroll, gradient: 'from-amber-400 via-orange-400 to-red-400', shadow: 'shadow-amber-500/25' },
     
     // Additional Games
-    { id: 'hangman', name: 'Guess the Islamic Figure', icon: Users, gradient: 'from-purple-400 via-pink-400 to-red-400', shadow: 'shadow-purple-500/25' },
-    { id: 'tilawahTrail', name: 'Tilawah Trail', icon: Book, gradient: 'from-green-400 via-emerald-400 to-teal-400', shadow: 'shadow-green-500/25' },
+    { id: 'hangman', nameKey: 'hangman', icon: Users, gradient: 'from-purple-400 via-pink-400 to-red-400', shadow: 'shadow-purple-500/25' },
+    { id: 'tilawahTrail', nameKey: 'tilawahTrail', icon: Book, gradient: 'from-green-400 via-emerald-400 to-teal-400', shadow: 'shadow-green-500/25' },
     
     // New Interactive Games
-    { id: 'seerahScenarios', name: 'Seerah Scenarios', icon: History, gradient: 'from-rose-400 via-pink-400 to-fuchsia-400', shadow: 'shadow-rose-500/25' },
-    { id: 'hadithLab', name: 'The Hadith Lab', icon: Link, gradient: 'from-violet-400 via-purple-400 to-indigo-400', shadow: 'shadow-violet-500/25' },
-    { id: 'pillarFoundations', name: 'Pillar Foundations', icon: Layers, gradient: 'from-cyan-400 via-blue-400 to-indigo-400', shadow: 'shadow-cyan-500/25' },
+    { id: 'seerahScenarios', nameKey: 'seerahScenarios', icon: History, gradient: 'from-rose-400 via-pink-400 to-fuchsia-400', shadow: 'shadow-rose-500/25' },
+    { id: 'hadithLab', nameKey: 'hadithLab', icon: Link, gradient: 'from-violet-400 via-purple-400 to-indigo-400', shadow: 'shadow-violet-500/25' },
+    { id: 'pillarFoundations', nameKey: 'pillarFoundations', icon: Layers, gradient: 'from-cyan-400 via-blue-400 to-indigo-400', shadow: 'shadow-cyan-500/25' },
+    
+    // Journey Games (Solo Only)
+    { id: 'seerahTrip', nameKey: 'seerahTrip', name: 'Seerah Trip', icon: Compass, gradient: 'from-yellow-400 via-orange-400 to-amber-500', shadow: 'shadow-yellow-500/25', soloOnly: true },
     
     // Reflex Games (Solo Only)
-    { id: 'imanDefender', name: 'Iman Defender', icon: Shield, gradient: 'from-orange-400 via-red-400 to-pink-400', shadow: 'shadow-orange-500/25', soloOnly: true }
+    { id: 'imanDefender', nameKey: 'imanDefender', icon: Shield, gradient: 'from-orange-400 via-red-400 to-pink-400', shadow: 'shadow-orange-500/25', soloOnly: true }
   ];
+
+  // Add translated names to game types
+  const gameTypes = $derived(gameTypesBase.map(game => ({
+    ...game,
+    name: (t && t[game.nameKey]) || game.nameKey
+  })));
 
   // Filter games based on game mode
   const availableGames = $derived(
     gameMode === 'team' 
-      ? gameTypes.filter(game => !game.soloOnly)
-      : gameTypes
+      ? (gameTypes || []).filter(game => !game.soloOnly)
+      : (gameTypes || [])
   );
+  
 
   const chillCategories = $derived([
     { id: 'prophets', name: 'Prophets Stories', icon: Star, gradient: 'from-purple-400 via-indigo-400 to-blue-400', shadow: 'shadow-purple-500/25' },
@@ -190,7 +215,11 @@
       cardBg: 'bg-white/90 backdrop-blur-sm',
       border: 'border-amber-200/50',
       iconColor: 'text-amber-700',
-      suhbaColor: 'text-amber-900'
+      suhbaColor: 'text-amber-900',
+      loginBg: 'bg-amber-100/20 backdrop-blur-sm',
+      loginHoverBg: 'hover:bg-amber-100/40',
+      loginText: 'text-amber-900/90',
+      loginHoverText: 'hover:text-amber-900'
     },
     scroll: {
       bg: 'bg-gradient-to-br from-yellow-100 via-amber-100 to-orange-100',
@@ -198,7 +227,11 @@
       cardBg: 'bg-amber-50/90 backdrop-blur-sm',
       border: 'border-amber-300/50',
       iconColor: 'text-amber-700',
-      suhbaColor: 'text-amber-800'
+      suhbaColor: 'text-amber-800',
+      loginBg: 'bg-amber-100/30 backdrop-blur-sm',
+      loginHoverBg: 'hover:bg-amber-100/50',
+      loginText: 'text-amber-800/90',
+      loginHoverText: 'hover:text-amber-800'
     },
     midnight: {
       bg: 'bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900',
@@ -206,32 +239,51 @@
       cardBg: 'bg-slate-800/90 backdrop-blur-sm',
       border: 'border-slate-600/50',
       iconColor: 'text-slate-100',
-      suhbaColor: 'text-slate-100'
+      suhbaColor: 'text-slate-100',
+      loginBg: 'bg-white/10 backdrop-blur-sm',
+      loginHoverBg: 'hover:bg-white/20',
+      loginText: 'text-white/90',
+      loginHoverText: 'hover:text-white'
     }
   };
 
-  const currentTheme = $derived(themes[theme]);
+  const currentTheme = $derived((themes && theme && themes[theme]) ? themes[theme] : (themes && themes['desert']) ? themes['desert'] : {});
   
   // Theme-based login button properties
-  const loginButtonProps = $derived({
-    desert: { text: $currentLanguage.code === 'ar' ? 'صحبة' : 'Suhba', icon: Coffee },
-    scroll: { text: $currentLanguage.code === 'ar' ? 'صحبة' : 'Suhba', icon: Building },
-    midnight: { text: $currentLanguage.code === 'ar' ? 'صحبة' : 'Suhba', icon: Sunrise }
-  }[theme] || { text: $currentLanguage.code === 'ar' ? 'صحبة' : 'Suhba', icon: Coffee });
+  const loginButtonProps = $derived(() => {
+    const props = {
+      desert: { text: $currentLanguage.code === 'ar' ? 'أنا' : 'me', icon: UserShmagh },
+      scroll: { text: $currentLanguage.code === 'ar' ? 'أنا' : 'me', icon: UserGlasses },
+      midnight: { text: $currentLanguage.code === 'ar' ? 'أنا' : 'me', icon: UserKeffiyeh }
+    };
+    return (theme && props[theme]) ? props[theme] : { text: $currentLanguage.code === 'ar' ? 'أنا' : 'me', icon: UserShmagh };
+  });
   
   // Theme-based settings icon
-  const settingsIcon = $derived({
-    desert: Cog,
-    scroll: Settings2,
-    midnight: Wrench
-  }[theme] || Settings);
+  const settingsIcon = $derived(() => {
+    const icons = {
+      desert: Cog,
+      scroll: Settings2,
+      midnight: Wrench
+    };
+    return (theme && icons[theme]) ? icons[theme] : Settings;
+  });
   
-  // Theme-based back button properties
-  const backButtonProps = $derived({
-    desert: { text: t.back || 'Back', icon: ChevronLeft },
-    scroll: { text: t.back || 'Back', icon: ChevronRight },
-    midnight: { text: t.back || 'Back', icon: CornerUpLeft }
-  }[theme] || { text: t.back || 'Back', icon: ArrowLeft });
+  // Theme-based back button properties with correct direction logic
+  // English: < back (ChevronLeft)
+  // Arabic: رجوع > (ChevronRight)
+  const backButtonProps = $derived(() => {
+    const defaultProps = { 
+      text: (t && t.back) || 'Back', 
+      icon: $currentLanguage.direction === 'rtl' ? ChevronRight : ChevronLeft 
+    };
+    const props = {
+      desert: defaultProps,
+      scroll: defaultProps,
+      midnight: defaultProps
+    };
+    return (theme && props[theme]) ? props[theme] : defaultProps;
+  });
 
   function handleCardClick() {
     isFlipped = !isFlipped;
@@ -305,6 +357,12 @@
 
 
   function startGame(game) {
+    // Safety check for game object
+    if (!game || !game.id) {
+      console.error('Invalid game object:', game);
+      return;
+    }
+    
     // Check if game is coming soon
     if (game.id === 'tilawahTrail') {
       alert('Tilawah Trail - Coming Soon! This exciting Quranic verse completion game is under development.');
@@ -317,22 +375,66 @@
     // Handle different game types
     if (game.id === 'seerahScenarios' || game.id === 'hadithLab' || game.id === 'pillarFoundations') {
       currentScreen = 'gameMode';
+    } else if (game.id === 'seerahTrip') {
+      currentScreen = 'seerahTrip';
     } else if (game.id === 'imanDefender') {
       currentScreen = 'playing';
       initializeImanDefender();
+    } else if (gameMode === 'solo') {
+      // Show difficulty selection for solo games
+      currentScreen = 'difficultySelector';
     } else {
+      // For team/multiplayer mode, use medium difficulty as default
+      if (gameMode !== 'solo') {
+        selectedDifficulty = 'medium';
+      }
       currentScreen = 'playing';
       initializeGameQuestions(game.id);
     }
   }
   
+  function startGameWithDifficulty(difficulty) {
+    selectedDifficulty = difficulty;
+    currentScreen = 'playing';
+    initializeGameQuestions(currentGame.id);
+  }
+  
   function initializeGameQuestions(gameId) {
+    if (!newGameContent) {
+      console.error('Game content not available');
+      return;
+    }
+    
+    if (!gameId) {
+      console.error('Game ID not provided');
+      return;
+    }
+    
     if (gameId === 'seerahScenarios') {
       // For Seerah Scenarios in prophetic decisions mode
-      gameQuestions = [...newGameContent.seerahScenarios.propheticDecisions];
-      shuffleArray(gameQuestions);
+      if (newGameContent.seerahScenarios?.propheticDecisions) {
+        gameQuestions = [...newGameContent.seerahScenarios.propheticDecisions];
+        shuffleArray(gameQuestions);
+      }
     } else if (newGameContent[gameId]) {
-      gameQuestions = [...newGameContent[gameId]];
+      let questions = [];
+      
+      // Handle the nested difficulty structure
+      const gameContent = newGameContent[gameId];
+      
+      if (gameMode === 'solo' && selectedDifficulty && selectedDifficulty !== 'all') {
+        // Get questions from specific difficulty level
+        if (gameContent[selectedDifficulty]) {
+          questions = [...gameContent[selectedDifficulty]];
+        }
+      } else {
+        // Get questions from all difficulty levels
+        if (gameContent.easy) questions.push(...gameContent.easy);
+        if (gameContent.medium) questions.push(...gameContent.medium);
+        if (gameContent.hard) questions.push(...gameContent.hard);
+      }
+      
+      gameQuestions = questions;
       shuffleArray(gameQuestions);
     }
     currentQuestionIndex = 0;
@@ -349,9 +451,30 @@
     }
   }
   
+  function isAnswerCorrect(answerIndex) {
+    // For sourceScholar mode, check if the option has correct: true
+    if (selectedGame?.id === 'hadithLab' && gameMode === 'sourceScholar') {
+      const options = currentQuestion.options;
+      return options && options[answerIndex] && options[answerIndex].correct === true;
+    }
+    // For other modes, use the correct index
+    return answerIndex === currentQuestion.correct;
+  }
+
   function handleAnswerSelection(answerIndex) {
+    // Check if it's multiplayer and if it's the current player's turn
+    if (gameMode === 'team' && $connectionState.connected) {
+      const currentPlayerIndex = players.findIndex(p => p === getMyPlayerName());
+      if (currentPlayerIndex !== currentPlayer) {
+        console.log(`⚠️ Not your turn! Current player: ${players[currentPlayer]}, You: ${getMyPlayerName()}`);
+        return; // Prevent answering when it's not your turn
+      }
+      
+      console.log(`🎯 Player ${getMyPlayerName()} selected answer ${answerIndex}`);
+    }
+    
     selectedAnswer = answerIndex;
-    isCorrect = answerIndex === currentQuestion.correct;
+    isCorrect = isAnswerCorrect(answerIndex);
     showExplanation = true;
     
     if (isCorrect) {
@@ -374,28 +497,70 @@
     } else {
       // Show Tafsir Moment for wrong answers
       showTafsirMoment = true;
+      const localizedContent = getLocalizedContent(currentQuestion, 'en');
       tafsirContent = {
-        explanation: currentQuestion.explanation,
-        hadith: currentQuestion.hadith || null,
+        explanation: localizedContent.explanation,
+        hadith: localizedContent.hadith || null,
         verse: currentQuestion.verse || null
       };
+    }
+    
+    // Broadcast answer selection to other players if in multiplayer mode
+    if (gameMode === 'team' && $connectionState.connected && roomCode) {
+      wsManager.selectAnswer(
+        roomCode, 
+        answerIndex, 
+        isCorrect, 
+        currentPlayer, 
+        players[currentPlayer]
+      );
     }
   }
   
   function nextQuestion() {
-    if (gameMode === 'team') {
-      currentPlayer = (currentPlayer + 1) % players.length;
+    // In multiplayer mode, only allow the current player to advance to next question
+    if (gameMode === 'team' && $connectionState.connected) {
+      const myPlayerIndex = players.findIndex(p => p === getMyPlayerName());
+      if (myPlayerIndex !== currentPlayer) {
+        console.log(`⚠️ Only ${players[currentPlayer]} can advance to next question!`);
+        return; // Prevent non-current player from advancing
+      }
     }
     
-    currentQuestionIndex++;
+    // Calculate next state
+    const nextPlayerIndex = gameMode === 'team' ? (currentPlayer + 1) % players.length : currentPlayer;
+    const nextQuestionIndex = currentQuestionIndex + 1;
+    
+    // Broadcast to other players if in multiplayer mode
+    if (gameMode === 'team' && $connectionState.connected && roomCode) {
+      console.log(`🎯 ${getMyPlayerName()} advancing to next question`);
+      wsManager.nextQuestion(roomCode, nextPlayerIndex, nextQuestionIndex);
+    }
+    
+    // Apply changes locally
+    if (gameMode === 'team') {
+      currentPlayer = nextPlayerIndex;
+    }
+    
+    currentQuestionIndex = nextQuestionIndex;
     round++;
     
     if (currentQuestionIndex < gameQuestions.length) {
+      resetAnswerState(); // Reset answer-related state
       loadCurrentQuestion();
     } else {
       // Game finished
       currentScreen = 'gameComplete';
     }
+  }
+
+  // Helper function to reset answer state between questions
+  function resetAnswerState() {
+    selectedAnswer = null;
+    showExplanation = false;
+    isCorrect = false;
+    showTafsirMoment = false;
+    showReward = false;
   }
   
   function closeTafsirMoment() {
@@ -419,28 +584,92 @@
     return formattedText;
   }
 
+  // Function to get localized game content
+  function getLocalizedContent(content, language) {
+    // Handle null/undefined content
+    if (!content) {
+      return {
+        prompt: '',
+        options: [],
+        explanation: '',
+        hadith: '',
+        scenario: '',
+        hadithText: ''
+      };
+    }
+    
+    if (language === 'ar') {
+      // Return Arabic version if available, otherwise return original
+      return {
+        prompt: content.prompt_ar || content.prompt,
+        options: content.options_ar || content.options,
+        explanation: content.explanation_ar || content.explanation,
+        hadith: content.hadith_ar || content.hadith,
+        scenario: content.scenario_ar || content.scenario,
+        hadithText: content.hadithText_ar || content.hadithText
+      };
+    }
+    return content;
+  }
+
   
   // Room management functions
+  // Map frontend game IDs to backend quiz types
+  function getQuizTypeFromGame(gameId) {
+    const gameQuizMapping = {
+      'maqasidMaster': 'maqasid',
+      'meccanMedinanGame': 'makan_nuzul',
+      'tilawahTrail': 'tarteeb_suwar',
+      'seerahScenarios': 'ghareeb',
+      'hadithLab': 'ghareeb',
+      'pillarFoundations': 'ghareeb',
+      'imanDefender': 'ghareeb'
+    };
+    return gameQuizMapping[gameId] || 'ghareeb'; // default to ghareeb
+  }
+
   function createRoom() {
     roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     isRoomHost = true;
     roomPlayers = ['Host']; // Add host as first player
     gameMode = 'team';
-    currentScreen = 'roomLobby';
-    console.log('Created room:', roomCode);
+    previousScreen = 'suhbaSelector';
+    currentScreen = 'createRoomGameSelector';
+    
+    // Connect to WebSocket backend if not already connected
+    if (!$connectionState.connected) {
+      wsManager.connect();
+    }
+    
+    // Create room in backend (will be called when a game is selected)
+    console.log('🎯 HOST created room:', roomCode, '- isRoomHost:', isRoomHost);
   }
   
-  function joinRoom() {
+  async function joinRoom() {
     if (roomCode.trim()) {
       isRoomHost = false;
-      roomPlayers = ['Host', 'Player']; // Simulate joined room
+      // Don't simulate players anymore - let WebSocket handle real player management
       gameMode = 'team';
-      currentScreen = 'roomLobby';
-      console.log('Joining room:', roomCode);
+      
+      try {
+        // Join room in backend - use default quiz type, backend will handle the actual room type
+        await wsManager.joinRoom(roomCode, 'ghareeb');
+        console.log('👥 PLAYER joined room:', roomCode, '- isRoomHost:', isRoomHost);
+        
+        currentScreen = 'roomLobby';
+      } catch (error) {
+        console.error('Failed to join room:', error);
+        // Handle connection error - maybe show error message to user
+      }
     }
   }
   
   function leaveRoom() {
+    // Leave room in backend if connected
+    if ($connectionState.connected && roomCode) {
+      wsManager.leaveRoom(roomCode);
+    }
+    
     roomCode = '';
     isRoomHost = false;
     roomPlayers = [];
@@ -456,11 +685,127 @@
       }, 2000);
     });
   }
+
+  // Helper function to determine current player's name based on host status
+  function getMyPlayerName() {
+    if (isRoomHost) {
+      return 'Host';
+    } else {
+      // For non-host players, use a consistent approach
+      // In a real implementation, you'd want to track this in the backend
+      const playerNames = $roomState.players.length > 0 ? $roomState.players : players;
+      
+      // Simple approach: assign based on connection order
+      // Host is always index 0, so non-host players get subsequent positions
+      const nonHostPlayers = playerNames.filter(p => p !== 'Host');
+      
+      // For now, use client ID to make it more consistent across sessions
+      const myIndex = Math.abs(clientId.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % nonHostPlayers.length;
+      return nonHostPlayers[myIndex] || 'Player 2';
+    }
+  }
+
+  // Helper function to check if it's not the current player's turn
+  function isNotMyTurn() {
+    if (gameMode !== 'team' || !$connectionState.connected) {
+      return false; // In solo mode or offline, always allow answering
+    }
+    
+    const myPlayerIndex = players.findIndex(p => p === getMyPlayerName());
+    return myPlayerIndex !== currentPlayer;
+  }
+
+  // Handle multiplayer game start from WebSocket
+  $effect(() => {
+    console.log(`[${clientId}] Effect triggered - gameStarted:`, $roomState.gameStarted, 'isRoomHost:', isRoomHost, 'gameId:', $roomState.gameId, 'currentScreen:', currentScreen);
+    
+    if ($roomState.gameStarted && !isRoomHost && $roomState.gameId && currentScreen === 'roomLobby') {
+      console.log(`[${clientId}] 🎮 Non-host player starting game:`, $roomState.gameId);
+      
+      // Find the game from availableGames using the gameId from WebSocket
+      const gameToStart = availableGames.find(game => game.id === $roomState.gameId);
+      if (!gameToStart) {
+        console.error('❌ Game not found:', $roomState.gameId, 'Available games:', availableGames.map(g => g.id));
+        return;
+      }
+      
+      console.log('✅ Game found, starting:', gameToStart.name);
+      
+      // Set the current game so non-host players know what to play
+      currentGame = gameToStart;
+      gameMode = 'team';
+      players = $roomState.players.length > 0 ? [...$roomState.players] : ['Host', 'Player 2'];
+      
+      // Initialize game state
+      initializeGame();
+      resetGameState();
+      
+      console.log('🚀 Launching game screen for:', currentGame.id);
+      
+      // Start the same game that host selected
+      if (currentGame.id === 'imanDefender') {
+        currentScreen = 'playing';
+        initializeImanDefender();
+      } else if (currentGame.id === 'seerahScenarios' || currentGame.id === 'hadithLab' || currentGame.id === 'pillarFoundations') {
+        currentScreen = 'gameMode';
+      } else {
+        selectedDifficulty = 'medium';
+        currentScreen = 'playing';
+        initializeGameQuestions(currentGame.id);
+      }
+      
+      // Reset game started state to prevent retriggering
+      wsManager.resetGameStarted();
+      
+      console.log('✅ Game launch completed for non-host player');
+    }
+  });
+
+  // Simplified answer synchronization - removed complex effect
+  let lastProcessedMessage = $state(null);
+
+  // Simplified next question synchronization - removed complex effect
+  let nextQuestionSync = $state(false);
   
   function startMultiplayerGame() {
-    if (roomPlayers.length >= 2) {
-      players = [...roomPlayers];
-      currentScreen = 'gameSelector';
+    if (($roomState.playerCount || roomPlayers.length) >= 2 && currentGame) {
+      console.log(`[${clientId}] 🎯 Host starting multiplayer game:`, currentGame.id, 'with', ($roomState.playerCount || roomPlayers.length), 'players');
+      
+      // Set up team mode properly
+      gameMode = 'team';
+      players = $roomState.players.length > 0 ? [...$roomState.players] : [...roomPlayers];
+      previousScreen = 'roomLobby';
+      
+      // Notify backend that game is starting
+      if ($connectionState.connected && roomCode) {
+        console.log('📡 Sending game start signal to backend for room:', roomCode);
+        wsManager.startGame(roomCode, currentGame.id, currentGame.id);
+      } else {
+        console.warn('⚠️ Not connected to backend, cannot notify other players');
+      }
+      
+      // Initialize game state first
+      initializeGame();
+      resetGameState();
+      
+      console.log('🚀 Host launching game screen for:', currentGame.id);
+      
+      // Directly start the selected game instead of going to game selector
+      if (currentGame.id === 'imanDefender') {
+        currentScreen = 'playing';
+        initializeImanDefender();
+      } else if (currentGame.id === 'seerahScenarios' || currentGame.id === 'hadithLab' || currentGame.id === 'pillarFoundations') {
+        currentScreen = 'gameMode';
+      } else {
+        // For other games, go directly to playing screen with medium difficulty
+        selectedDifficulty = 'medium';
+        currentScreen = 'playing';
+        initializeGameQuestions(currentGame.id);
+      }
+      
+      console.log('✅ Host game launch completed');
+    } else {
+      console.warn('⚠️ Cannot start game - not enough players or no game selected');
     }
   }
   
@@ -483,45 +828,81 @@
   }
   
   function initializeTimelineScramble() {
+    if (!newGameContent?.seerahScenarios?.timelineScramble) {
+      console.error('Seerah Scenarios timeline content not available');
+      return;
+    }
+    
     const chapters = newGameContent.seerahScenarios.timelineScramble;
-    currentTimelineChapter = chapters[Math.floor(Math.random() * chapters.length)];
-    draggedEvents = [...currentTimelineChapter.events].sort(() => Math.random() - 0.5);
-    userOrder = [];
-    isTimelineComplete = false;
+    if (chapters && chapters.length > 0) {
+      currentTimelineChapter = chapters[Math.floor(Math.random() * chapters.length)];
+      if (currentTimelineChapter?.events) {
+        draggedEvents = [...currentTimelineChapter.events].sort(() => Math.random() - 0.5);
+        userOrder = [];
+        isTimelineComplete = false;
+      }
+    }
   }
   
   function initializeHadithLab(mode) {
+    if (!newGameContent?.hadithLab) {
+      console.error('Hadith Lab content not available');
+      return;
+    }
+    
     if (mode === 'isnadChains') {
       const chains = newGameContent.hadithLab.isnadChains;
-      currentQuestion = chains[Math.floor(Math.random() * chains.length)];
+      if (chains && chains.length > 0) {
+        currentQuestion = chains[Math.floor(Math.random() * chains.length)];
+      }
     } else if (mode === 'matnMatching') {
       const matching = newGameContent.hadithLab.matnMatching;
-      currentQuestion = matching[Math.floor(Math.random() * matching.length)];
-      matchedPairs = [];
+      if (matching && matching.length > 0) {
+        currentQuestion = matching[Math.floor(Math.random() * matching.length)];
+        matchedPairs = [];
+      }
     } else if (mode === 'sourceScholar') {
       const scholar = newGameContent.hadithLab.sourceScholar;
-      currentQuestion = scholar[Math.floor(Math.random() * scholar.length)];
+      if (scholar && scholar.length > 0) {
+        currentQuestion = scholar[Math.floor(Math.random() * scholar.length)];
+      }
     }
   }
   
   function initializePillarFoundations(mode) {
+    if (!newGameContent?.pillarFoundations) {
+      console.error('Pillar Foundations content not available');
+      return;
+    }
+    
     if (mode === 'beliefBuilder') {
       const beliefs = newGameContent.pillarFoundations.beliefBuilder;
-      currentQuestion = beliefs[Math.floor(Math.random() * beliefs.length)];
+      if (beliefs && beliefs.length > 0) {
+        currentQuestion = beliefs[Math.floor(Math.random() * beliefs.length)];
+      }
     } else if (mode === 'categorizationBlitz') {
       const categories = newGameContent.pillarFoundations.categorizationBlitz;
-      currentQuestion = categories[Math.floor(Math.random() * categories.length)];
-      timeRemaining = 30;
+      if (categories && categories.length > 0) {
+        currentQuestion = categories[Math.floor(Math.random() * categories.length)];
+        timeRemaining = 30;
+      }
     } else if (mode === 'asmaUlHusna') {
       const names = newGameContent.pillarFoundations.asmaUlHusna;
-      currentAsmaName = names[Math.floor(Math.random() * names.length)];
-      wheelRotation = 0;
-      timeRemaining = 15;
+      if (names && names.length > 0) {
+        currentAsmaName = names[Math.floor(Math.random() * names.length)];
+        wheelRotation = 0;
+        timeRemaining = 15;
+      }
     }
   }
   
   // Iman Defender Functions
   function initializeImanDefender() {
+    if (!newGameContent?.imanDefender?.difficulty) {
+      console.error('Iman Defender content not available');
+      return;
+    }
+    
     imanDefenderActive = true;
     fallingWords = [];
     righteousConcepts = [];
@@ -818,21 +1199,20 @@
 </script>
 
 {#if currentScreen === 'home'}
-  {@const LoginIcon = loginButtonProps.icon}
-  {@const SettingsIcon = settingsIcon}
-  <div class="min-h-screen {currentTheme.bg} flex flex-col items-center justify-center p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
-    <!-- Top Navigation -->
-    <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
-      <!-- User Button -->
-      <button
-        onclick={() => showAuth = true}
-        class="flex items-center space-x-2 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}"
-      >
-        <LoginIcon class="w-5 h-5 {currentTheme.iconColor}" />
-        <span class="font-medium {currentTheme.suhbaColor}">{loginButtonProps.text}</span>
-      </button>
-      
-      <!-- Salah Timer -->
+  {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
+  {@const SettingsIcon = settingsIcon || Settings}
+  <div class="min-h-screen {currentTheme.bg} flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <!-- User Button - Left Side -->
+    <button
+      onclick={() => showAuth = true}
+      class="absolute top-6 left-6 z-20 flex items-center space-x-2 {currentTheme.loginBg} rounded-xl px-4 py-2 {currentTheme.loginText} {currentTheme.loginHoverText} {currentTheme.loginHoverBg} transition-all duration-300"
+    >
+      <LoginIcon class="w-5 h-5 {currentTheme.suhbaColor}" />
+      <span class="font-medium {currentTheme.suhbaColor}">{loginButtonProps.text}</span>
+    </button>
+    
+    <!-- Salah Timer - Center Right -->
+    <div class="absolute top-6 right-24 z-20">
       <SalahTimer {currentTheme} {theme} />
     </div>
     
@@ -853,8 +1233,8 @@
 
     <div class="text-center mb-16 relative z-10">
       <div class="mb-6">
-        <div class="w-24 h-24 bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl transform rotate-12">
-          <Book class="w-12 h-12 text-white transform -rotate-12" />
+        <div class="mx-auto mb-6 transform hover:scale-105 transition-transform duration-300">
+          <SuhbaLogo size="120px" className="drop-shadow-2xl" />
         </div>
       </div>
       <h1 class="text-7xl font-light {currentTheme.suhbaColor} mb-4 font-serif tracking-wide">{t.appTitle}</h1>
@@ -898,33 +1278,45 @@
         {:else}
           <Moon class="w-4 h-4" />
         {/if}
-        <span>{t.theme}: {theme.charAt(0).toUpperCase() + theme.slice(1)}</span>
+        <span>{t.theme}: {theme === 'desert' ? t.themeDesert : theme === 'scroll' ? t.themeScroll : t.themeMidnight}</span>
       </button>
     </div>
   </div>
 
 {:else if currentScreen === 'modeSelector'}
-  {@const SettingsIcon = settingsIcon}
-  {@const BackIcon = backButtonProps.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
-    <!-- Settings and Salah Timer -->
+  {@const SettingsIcon = settingsIcon || Settings}
+  {@const BackIcon = backButtonProps?.icon || ChevronLeft}
+  {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
+    <!-- Header with Login, Salah Timer, and Settings -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
-      <div></div>
+      <!-- Login Button -->
+      <button
+        onclick={() => showAuth = true}
+        class="flex items-center space-x-2 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}"
+      >
+        <LoginIcon class="w-4 h-4" />
+        <span class="text-sm font-medium">{loginButtonProps.text}</span>
+      </button>
+      
+      <!-- Salah Timer -->
       <SalahTimer {currentTheme} {theme} />
+      
+      <!-- Settings Button -->
+      <button
+        onclick={() => showSettings = true}
+        class="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
+      >
+        <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
+      </button>
     </div>
     
-    <button
-      onclick={() => showSettings = true}
-      class="absolute top-6 right-6 z-20 bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
-    >
-      <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
-    </button>
-    
-    <div class="max-w-2xl mx-auto relative z-10">
-      <div class="flex items-center justify-between mb-12">
+    <div class="max-w-2xl mx-auto relative z-10 pt-20">
+      <div class="flex items-center justify-between mb-16">
         <button
           onclick={() => currentScreen = 'home'}
-          class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
+          class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}"
+          type="button"
         >
           <BackIcon class="w-5 h-5 {currentTheme.iconColor}" />
           <span>{backButtonProps.text}</span>
@@ -936,10 +1328,12 @@
       <div class="space-y-8">
         <button
           onclick={() => {
+            console.log('Solo play button clicked');
             gameMode = 'solo';
+            previousScreen = 'modeSelector';
             currentScreen = 'gameSelector';
           }}
-          class="group w-full bg-gradient-to-r from-blue-400 to-indigo-500 p-10 rounded-3xl hover:shadow-2xl hover:-translate-y-3 transition-all duration-500 text-white"
+          class="group w-full bg-gradient-to-r from-blue-400 to-indigo-500 p-10 rounded-3xl hover:shadow-2xl hover:-translate-y-3 transition-all duration-500 text-white cursor-pointer z-10 relative"
         >
           <User class="w-16 h-16 mx-auto mb-6" />
           <h3 class="text-2xl font-bold mb-4">{t.soloPlay}</h3>
@@ -948,14 +1342,15 @@
 
         <button
           onclick={() => {
+            console.log('Suhba mode button clicked');
             gameMode = 'team';
             currentScreen = 'suhbaSelector';
           }}
-          class="group w-full bg-gradient-to-r from-emerald-400 to-teal-500 p-10 rounded-3xl hover:shadow-2xl hover:-translate-y-3 transition-all duration-500 text-white"
+          class="group w-full bg-gradient-to-r from-emerald-400 to-teal-500 p-10 rounded-3xl hover:shadow-2xl hover:-translate-y-3 transition-all duration-500 text-white cursor-pointer z-10 relative"
         >
           <Users class="w-16 h-16 mx-auto mb-6" />
-          <h3 class="text-2xl font-bold mb-4">Suhba Mode</h3>
-          <p class="opacity-90 text-lg">Play together with friends and family</p>
+          <h3 class="text-2xl font-bold mb-4">{t.suhbaMode}</h3>
+          <p class="opacity-90 text-lg">{t.suhbaDescription}</p>
         </button>
       </div>
     </div>
@@ -964,7 +1359,7 @@
 {:else if currentScreen === 'suhbaSelector'}
   {@const SettingsIcon = settingsIcon}
   {@const BackIcon = backButtonProps.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
       <div></div>
@@ -987,7 +1382,7 @@
     <div class="max-w-5xl mx-auto relative z-10">
       <div class="flex items-center justify-between mb-12">
         <button
-          onclick={() => currentScreen = 'modeSelector'}
+          onclick={() => currentScreen = 'suhbaSelector'}
           class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
         >
           <BackIcon class="w-5 h-5 {currentTheme.iconColor}" />
@@ -1042,6 +1437,7 @@
             onclick={() => {
               gameMode = 'team';
               players = [];
+              previousScreen = 'suhbaSelector';
               currentScreen = 'teamSetup';
             }}
             class="group bg-gradient-to-br from-indigo-400 to-blue-500 p-6 rounded-3xl hover:shadow-2xl hover:-translate-y-3 hover:scale-105 transition-all duration-500 text-white"
@@ -1055,56 +1451,124 @@
         </div>
       </div>
 
-      <!-- Games Section -->
-      <div>
-        <h3 class="text-2xl font-bold {currentTheme.text} mb-6 text-center">{t.chooseYourGame}</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {#each availableGames as game}
-          {@const GameIcon = game.icon}
-            <button
-              onclick={() => startGame(game)}
-              class="group relative bg-gradient-to-br {game.gradient} p-8 rounded-3xl hover:shadow-2xl {game.shadow} hover:-translate-y-3 hover:scale-105 transition-all duration-500 overflow-hidden"
-            >
-              <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <div class="relative">
-                <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <GameIcon class="w-8 h-8 text-white" />
-                </div>
-                <h3 class="text-white font-bold text-xl text-center leading-tight">{game.name}</h3>
-                <div class="w-12 h-1 bg-white/40 rounded-full mx-auto mt-4 group-hover:w-16 transition-all duration-300"></div>
-              </div>
-            </button>
-          {/each}
+    </div>
+  </div>
+
+{:else if currentScreen === 'createRoomGameSelector'}
+  {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
+  {@const BackIcon = backButtonProps?.icon || ChevronLeft}
+  {@const SettingsIcon = settingsIcon || Settings}
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden">
+    <!-- User Button - Left Side -->
+    <div class="absolute top-6 left-6 z-20">
+      <button
+        onclick={() => showAuth = true}
+        class="flex items-center space-x-3 {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm rounded-xl px-4 py-2 {currentTheme.text} hover:shadow-lg transition-all duration-300 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}"
+      >
+        <LoginIcon class="w-5 h-5 {currentTheme.iconColor}" />
+        <span>{loginButtonProps.text}</span>
+      </button>
+    </div>
+
+    <!-- Settings Button - Right Side -->
+    <div class="absolute top-6 right-6 z-20">
+      <button
+        onclick={() => showSettings = true}
+        class="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
+      >
+        <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
+      </button>
+    </div>
+
+    <!-- Salah Timer -->
+    <div class="absolute top-6 left-1/2 transform -translate-x-1/2 z-20">
+      <SalahTimer />
+    </div>
+
+    <!-- Background decoration -->
+    <div class="absolute inset-0 opacity-5">
+      <div class="absolute top-20 right-20 w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full blur-3xl"></div>
+      <div class="absolute bottom-20 left-20 w-40 h-40 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-5xl mx-auto relative z-10">
+      <div class="flex items-center justify-between mb-12">
+        <button
+          onclick={() => currentScreen = 'suhbaSelector'}
+          class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
+        >
+          <BackIcon class="w-5 h-5 {currentTheme.iconColor}" />
+          <span>{backButtonProps.text}</span>
+        </button>
+        <h2 class="text-3xl font-bold {currentTheme.text}">{t.chooseYourGame}</h2>
+        <div class="flex items-center space-x-2 {currentTheme.text} opacity-70">
+          <span class="text-sm">Room: {roomCode}</span>
         </div>
+      </div>
+
+      <!-- Games Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {#each availableGames as game}
+        {@const GameIcon = game.icon}
+          <button
+            onclick={async () => {
+              currentGame = game;
+              // Create room in backend with the selected game type
+              if (isRoomHost && roomCode) {
+                try {
+                  const quizType = getQuizTypeFromGame(game.id);
+                  await wsManager.createRoom(roomCode, quizType, true);
+                  console.log('Successfully created room on backend:', roomCode, quizType);
+                } catch (error) {
+                  console.error('Failed to create room:', error);
+                  // Handle error - maybe show error message to user
+                  return;
+                }
+              }
+              currentScreen = 'roomLobby';
+            }}
+            class="group relative bg-gradient-to-br {game.gradient} p-8 rounded-3xl hover:shadow-2xl {game.shadow} hover:-translate-y-3 hover:scale-105 transition-all duration-500 overflow-hidden"
+          >
+            <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div class="relative">
+              <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+                <GameIcon class="w-8 h-8 text-white" />
+              </div>
+              <h3 class="text-white font-bold text-xl text-center leading-tight">{game.name}</h3>
+              <div class="w-12 h-1 bg-white/40 rounded-full mx-auto mt-4 group-hover:w-16 transition-all duration-300"></div>
+            </div>
+          </button>
+        {/each}
       </div>
     </div>
   </div>
 
 {:else if currentScreen === 'gameSelector'}
-  {@const LoginIcon = loginButtonProps.icon}
-  {@const BackIcon = backButtonProps.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
-    <!-- User, Settings and Salah Timer -->
-    <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
-      <!-- User Button -->
-      <button
-        onclick={() => showAuth = true}
-        class="flex items-center space-x-2 {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm rounded-xl px-4 py-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}"
-      >
-        <LoginIcon class="w-5 h-5 {currentTheme.text}" />
-        <span class="font-medium">{loginButtonProps.text}</span>
-      </button>
-      
+  {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
+  {@const BackIcon = backButtonProps?.icon || ChevronLeft}
+  {@const SettingsIcon = settingsIcon || Settings}
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden">
+    <!-- User Button - Left Side -->
+    <button
+      onclick={() => showAuth = true}
+      class="absolute top-6 left-6 z-20 flex items-center space-x-2 {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm rounded-xl px-4 py-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300"
+    >
+      <LoginIcon class="w-5 h-5 {currentTheme.text}" />
+      <span class="font-medium">{loginButtonProps.text}</span>
+    </button>
+    
+    <!-- Salah Timer - Center Right -->
+    <div class="absolute top-6 right-24 z-20">
       <SalahTimer {currentTheme} {theme} />
-      
-      <!-- Settings Button -->
-      <button
-        onclick={() => showSettings = true}
-        class="{currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm rounded-xl p-3 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300"
-      >
-        <Settings class="w-5 h-5 {currentTheme.text}" />
-      </button>
     </div>
+    
+    <!-- Settings Button - Far Right -->
+    <button
+      onclick={() => showSettings = true}
+      class="absolute top-6 right-6 z-20 bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
+    >
+      <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
+    </button>
     
     <!-- Background decoration -->
     <div class="absolute inset-0 opacity-5">
@@ -1116,13 +1580,7 @@
       <div class="flex items-center justify-between mb-12">
         <button
           onclick={() => {
-            if (gameMode === 'solo') {
-              currentScreen = 'modeSelector';
-            } else if (players.length > 0) {
-              currentScreen = 'teamSetup';
-            } else {
-              currentScreen = 'suhbaSelector';
-            }
+            currentScreen = previousScreen;
           }}
           class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
         >
@@ -1157,7 +1615,7 @@
 {:else if currentScreen === 'chillSelector'}
   {@const SettingsIcon = settingsIcon}
   {@const BackIcon = backButtonProps.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
       <div></div>
@@ -1216,7 +1674,7 @@
   {@const SettingsIcon = settingsIcon}
   {@const CurrentGameIcon = currentGame.icon}
   <!-- Unified playing screen with settings and salah timer -->
-  <div class="min-h-screen {currentTheme.bg} relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} relative overflow-hidden" dir="{'ltr'}">
     <!-- Navigation Header -->
     <div class="relative z-10 p-6">
       <div class="flex items-center justify-between mb-8">
@@ -1230,12 +1688,16 @@
         
         <div class="flex items-center space-x-6 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
           <SalahTimer {currentTheme} {theme} />
-          {#if gameMode === 'solo' && currentGame?.id !== 'imanDefender'}
+          {#if currentGame?.id !== 'imanDefender'}
             <button
               onclick={pauseGame}
               class="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
             >
-              <span class="{currentTheme.iconColor} text-lg">{gamePaused ? '▶️' : '⏸️'}</span>
+              {#if gamePaused}
+                <Play class="w-5 h-5 {currentTheme.iconColor}" />
+              {:else}
+                <Pause class="w-5 h-5 {currentTheme.iconColor}" />
+              {/if}
             </button>
           {/if}
           <button
@@ -1308,10 +1770,11 @@
           <div class="absolute inset-4 top-20 bottom-24 overflow-hidden rounded-xl bg-gradient-to-b from-sky-400/10 via-blue-400/5 to-purple-400/10">
             <!-- Falling Words -->
             {#each fallingWords as word (word.id)}
-              <div 
-                class="absolute transition-all duration-75 ease-linear cursor-pointer select-none"
+              <button 
+                class="absolute transition-all duration-75 ease-linear cursor-pointer select-none border-0 bg-transparent p-0"
                 style="left: {word.x}px; top: {word.y}px;"
                 onclick={() => word.type === 'powerup' ? handlePowerupClick(word) : null}
+                type="button"
               >
                 {#if word.type === 'negative'}
                   <div class="bg-gradient-to-br from-red-400 to-red-600 text-white px-4 py-2 rounded-xl shadow-lg border-2 border-red-300/50 text-center min-w-[120px]">
@@ -1324,7 +1787,7 @@
                     <div class="text-xs font-semibold">{word.name}</div>
                   </div>
                 {/if}
-              </div>
+              </button>
             {/each}
             
             <!-- Cannon Visual -->
@@ -1429,23 +1892,29 @@
               <CurrentGameIcon class="w-8 h-8 text-white" />
             </div>
             
-            <!-- Show current player's turn in multiplayer -->
-            {#if gameMode === 'team' && players.length > 0}
-              <div class="mb-6">
-                <div class="inline-flex items-center space-x-2 bg-gradient-to-r from-emerald-100/20 to-teal-100/20 px-4 py-2 rounded-full">
-                  <User class="w-5 h-5 {currentTheme.text}" />
-                  <span class="{currentTheme.text} font-semibold">{players[currentPlayer]}'s Turn</span>
+            <!-- Turn Indicator for Multiplayer -->
+            {#if gameMode === 'team' && $connectionState.connected}
+              <div class="mb-4">
+                <div class="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-100/20 to-purple-100/20 border border-blue-300/30 rounded-xl px-4 py-2">
+                  <Users class="w-4 h-4 {currentTheme.text}" />
+                  <span class="{currentTheme.text} text-sm font-medium">
+                    {players[currentPlayer]}'s Turn
+                    {isNotMyTurn() ? '' : ' (You)'}
+                  </span>
+                  {#if !isNotMyTurn()}
+                    <Crown class="w-4 h-4 text-amber-500" />
+                  {/if}
                 </div>
               </div>
             {/if}
             
             <h3 class="text-xl font-semibold {currentTheme.text} mb-6 leading-relaxed">
               {#if currentQuestion.scenario}
-                {formatQuestionText(currentQuestion.scenario, questionNames)}
+                {formatQuestionText(getLocalizedContent(currentQuestion, 'en').prompt || currentQuestion.scenario, questionNames)}
               {:else if currentQuestion.hadithText}
-                {currentQuestion.hadithText}
+                {getLocalizedContent(currentQuestion, 'en').hadith || currentQuestion.hadithText}
               {:else if currentQuestion.prompt}
-                {formatQuestionText(currentQuestion.prompt, questionNames)}
+                {formatQuestionText(getLocalizedContent(currentQuestion, 'en').prompt, questionNames)}
               {:else}
                 {currentQuestion.text || 'Question content'}
               {/if}
@@ -1455,27 +1924,35 @@
           <!-- Answer Options -->
           {#if currentQuestion.options}
             <div class="space-y-4 mb-8">
-              {#each currentQuestion.options as option, index}
+              {#each (getLocalizedContent(currentQuestion, 'en').options || currentQuestion.options) as option, index}
                 <button
-                  onclick={() => !showExplanation && handleAnswerSelection(index)}
-                  disabled={showExplanation}
+                  onclick={() => !showExplanation && !isNotMyTurn() && handleAnswerSelection(index)}
+                  disabled={showExplanation || isNotMyTurn()}
                   class="w-full p-4 rounded-xl text-left transition-all duration-300 border-2 {
                     showExplanation 
-                      ? (index === currentQuestion.correct 
+                      ? (isAnswerCorrect(index)
                           ? 'bg-green-100/20 border-green-300/50 {currentTheme.text}' 
                           : (index === selectedAnswer 
                               ? 'bg-red-100/20 border-red-300/50 {currentTheme.text}' 
                               : '{currentTheme.cardBg} {currentTheme.border} opacity-50'))
-                      : 'hover:bg-gradient-to-r hover:from-blue-100/20 hover:to-purple-100/20 hover:border-blue-300/50 {currentTheme.cardBg} {currentTheme.border}'
+                      : isNotMyTurn()
+                        ? '{currentTheme.cardBg} {currentTheme.border} opacity-30 cursor-not-allowed'
+                        : 'hover:bg-gradient-to-r hover:from-blue-100/20 hover:to-purple-100/20 hover:border-blue-300/50 {currentTheme.cardBg} {currentTheme.border}'
                   } {currentTheme.text}"
                 >
                   <div class="flex items-center space-x-4">
                     <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center text-white font-bold text-sm">
                       {String.fromCharCode(65 + index)}
                     </div>
-                    <span class="flex-1">{option}</span>
+                    <span class="flex-1">
+                      {#if typeof option === 'object' && option?.book}
+                        {option.book}
+                      {:else}
+                        {option}
+                      {/if}
+                    </span>
                     {#if showExplanation}
-                      {#if index === currentQuestion.correct}
+                      {#if isAnswerCorrect(index)}
                         <Check class="w-5 h-5 text-green-600" />
                       {:else if index === selectedAnswer}
                         <ArrowLeft class="w-5 h-5 text-red-600 rotate-45" />
@@ -1492,16 +1969,16 @@
             <div class="bg-gradient-to-r from-blue-100/20 to-purple-100/20 rounded-2xl p-6 mb-6">
               <div class="flex items-center space-x-2 mb-4">
                 <Lightbulb class="w-5 h-5 text-blue-600" />
-                <h4 class="font-semibold {currentTheme.text}">Explanation</h4>
+                <h4 class="font-semibold {currentTheme.text}">{t.explanation}</h4>
               </div>
               <p class="{currentTheme.text} opacity-80 leading-relaxed">
-                {currentQuestion.explanation}
+                {getLocalizedContent(currentQuestion, 'en').explanation}
               </p>
               
               {#if currentQuestion.lesson}
                 <div class="mt-4 p-4 bg-gradient-to-r from-emerald-100/20 to-teal-100/20 rounded-xl">
                   <p class="{currentTheme.text} opacity-80 italic text-sm font-medium">
-                    Lesson: {currentQuestion.lesson}
+                    {$currentLanguage.code === 'ar' ? 'العبرة: ' : 'Lesson: '}{currentQuestion.lesson}
                   </p>
                 </div>
               {/if}
@@ -1509,7 +1986,7 @@
               {#if currentQuestion.hadith}
                 <div class="mt-4 p-4 bg-gradient-to-r from-amber-100/20 to-orange-100/20 rounded-xl">
                   <p class="{currentTheme.text} opacity-80 italic text-sm">
-                    "{currentQuestion.hadith}"
+                    "{getLocalizedContent(currentQuestion, 'en').hadith}"
                   </p>
                 </div>
               {/if}
@@ -1518,10 +1995,14 @@
             <div class="text-center">
               <button
                 onclick={nextQuestion}
-                class="bg-gradient-to-r from-emerald-400 to-teal-500 text-white px-8 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-semibold flex items-center space-x-2 mx-auto"
+                disabled={isNotMyTurn()}
+                class="{isNotMyTurn() 
+                  ? 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
+                  : 'bg-gradient-to-r from-emerald-400 to-teal-500 text-white hover:shadow-lg'
+                } px-8 py-3 rounded-xl transition-all duration-300 font-semibold flex items-center space-x-2 mx-auto"
               >
-                <SkipForward class="w-5 h-5 {currentTheme.iconColor}" />
-                <span>Next Question</span>
+                <SkipForward class="w-5 h-5" />
+                <span>{isNotMyTurn() ? `${players[currentPlayer]}'s Turn` : t.nextQuestion}</span>
               </button>
             </div>
           {/if}
@@ -1557,8 +2038,8 @@
       </div>
     {/if}
     
-    <!-- Pause Overlay for Solo Mode Games -->
-    {#if gameMode === 'solo' && gamePaused && currentGame?.id !== 'imanDefender'}
+    <!-- Pause Overlay for All Games -->
+    {#if gamePaused && currentGame?.id !== 'imanDefender'}
       <div class="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
         <div class="{currentTheme.cardBg} {currentTheme.border} border-2 rounded-3xl p-8 backdrop-blur-sm text-center">
           <div class="w-16 h-16 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -1580,7 +2061,7 @@
 {:else if currentScreen === 'roomLobby'}
   {@const SettingsIcon = settingsIcon}
   {@const BackIcon = backButtonProps.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
       <div></div>
@@ -1651,30 +2132,30 @@
             <Users class="w-6 h-6 {currentTheme.text}" />
             <h3 class="text-xl font-bold {currentTheme.text}">{t.playersInRoom}</h3>
             <span class="bg-gradient-to-r from-emerald-400 to-teal-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-              {roomPlayers.length}
+              {$roomState.playerCount || roomPlayers.length}
             </span>
           </div>
           
           <div class="space-y-3 mb-8">
-            {#each roomPlayers as player, index}
+            {#each ($roomState.players.length > 0 ? $roomState.players : roomPlayers) as player, index}
               <div class="flex items-center space-x-3 p-4 rounded-xl bg-gradient-to-r from-gray-100/20 to-gray-200/20 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
                 <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center">
                   <User class="w-5 h-5 text-white" />
                 </div>
                 <div class="flex-1">
                   <p class="{currentTheme.text} font-medium">{player}</p>
-                  {#if index === 0}
+                  {#if index === 0 || player === 'Host'}
                     <p class="{currentTheme.text} opacity-60 text-sm">Host</p>
                   {/if}
                 </div>
-                {#if isRoomHost && index === 0}
+                {#if (isRoomHost && index === 0) || player === 'Host'}
                   <Crown class="w-5 h-5 text-amber-500" />
                 {/if}
               </div>
             {/each}
           </div>
           
-          {#if roomPlayers.length < 2}
+          {#if ($roomState.playerCount || roomPlayers.length) < 2}
             <div class="text-center py-8">
               <div class="w-16 h-16 bg-gradient-to-br from-gray-300/20 to-gray-400/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Clock class="w-8 h-8 {currentTheme.text} opacity-50" />
@@ -1702,7 +2183,7 @@
 {:else if currentScreen === 'teamSetup'}
   {@const SettingsIcon = settingsIcon}
   {@const BackIcon = backButtonProps.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
       <div></div>
@@ -1799,7 +2280,7 @@
   {@const stories = chillContent[chillCategory?.id] || []}
   {@const story = stories[0]}
   {#if story}
-    <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+    <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
       <!-- Settings and Salah Timer -->
       <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
         <div></div>
@@ -1898,7 +2379,7 @@
 
 {:else if currentScreen === 'gameComplete'}
   {@const SettingsIcon = settingsIcon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
       <div></div>
@@ -2029,11 +2510,13 @@
     </div>
   </div>
 
+{:else if currentScreen === 'seerahTrip'}
+  <SeerahTrip onBack={() => currentScreen = 'gameSelector'} />
 {:else if currentScreen === 'gameMode'}
   {@const SettingsIcon = settingsIcon}
   {@const BackIcon = backButtonProps.icon}
   {@const CurrentGameIcon = currentGame.icon}
-  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{$currentLanguage.direction}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
       <div></div>
@@ -2177,6 +2660,122 @@
       </div>
     </div>
   </div>
+
+{:else if currentScreen === 'difficultySelector'}
+  {@const BackIcon = backButtonProps?.icon || ChevronLeft}
+  {@const CurrentGameIcon = currentGame?.icon || User}
+  {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
+  {@const SettingsIcon = settingsIcon || Settings}
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden">
+    <!-- User Button - Left Side -->
+    <button
+      onclick={() => showAuth = true}
+      class="absolute top-6 left-6 z-20 flex items-center space-x-2 {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm rounded-xl px-4 py-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300"
+    >
+      <LoginIcon class="w-5 h-5 {currentTheme.text}" />
+      <span class="font-medium">{loginButtonProps.text}</span>
+    </button>
+    
+    <!-- Salah Timer - Center Right -->
+    <div class="absolute top-6 right-24 z-20">
+      <SalahTimer {currentTheme} {theme} />
+    </div>
+    
+    <!-- Settings Button - Far Right -->
+    <button
+      onclick={() => showSettings = true}
+      class="absolute top-6 right-6 z-20 bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
+    >
+      <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
+    </button>
+
+    <!-- Back Button -->
+    <button
+      onclick={() => currentScreen = 'gameSelector'}
+      class="absolute top-24 {$currentLanguage.direction === 'rtl' ? 'right-6' : 'left-6'} flex items-center space-x-2 {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm rounded-xl px-4 py-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 z-10 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}"
+    >
+      <BackIcon class="w-5 h-5 {currentTheme.text}" />
+      <span class="font-medium">{t.back}</span>
+    </button>
+
+    <!-- Main Content -->
+    <div class="pt-32 max-w-4xl mx-auto">
+      <!-- Game Header -->
+      <div class="text-center mb-16">
+        <div class="w-20 h-20 bg-gradient-to-br {currentGame?.gradient || 'from-blue-400 to-indigo-500'} rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl">
+          <CurrentGameIcon class="w-10 h-10 text-white" />
+        </div>
+        <h1 class="text-4xl font-bold {currentTheme.text} mb-4">{currentGame?.name}</h1>
+        <p class="{currentTheme.text} opacity-70 text-lg">{t.chooseDifficulty}</p>
+      </div>
+
+      <!-- Difficulty Selection Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        
+        <!-- Easy -->
+        <button
+          onclick={() => startGameWithDifficulty('easy')}
+          class="group bg-gradient-to-br from-green-400 to-emerald-500 p-8 rounded-3xl hover:shadow-2xl hover:-translate-y-3 hover:scale-105 transition-all duration-500 text-white"
+        >
+          <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold mb-4">{t.easy}</h3>
+          <p class="opacity-90 text-lg mb-4">{t.perfectForBeginners}</p>
+          <div class="bg-white/20 rounded-xl p-4">
+            <p class="text-sm opacity-90">• {t.basicQuestions}</p>
+            <p class="text-sm opacity-90">• {t.pointsPerCorrectAnswer5}</p>
+            <p class="text-sm opacity-90">• {t.greatForLearning}</p>
+          </div>
+        </button>
+
+        <!-- Medium -->
+        <button
+          onclick={() => startGameWithDifficulty('medium')}
+          class="group bg-gradient-to-br from-blue-400 to-indigo-500 p-8 rounded-3xl hover:shadow-2xl hover:-translate-y-3 hover:scale-105 transition-all duration-500 text-white"
+        >
+          <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold mb-4">{t.medium}</h3>
+          <p class="opacity-90 text-lg mb-4">{t.balancedChallenge}</p>
+          <div class="bg-white/20 rounded-xl p-4">
+            <p class="text-sm opacity-90">• {t.intermediateQuestions}</p>
+            <p class="text-sm opacity-90">• {t.pointsPerCorrectAnswer10}</p>
+            <p class="text-sm opacity-90">• {t.goodForPractice}</p>
+          </div>
+        </button>
+
+        <!-- Hard -->
+        <button
+          onclick={() => startGameWithDifficulty('hard')}
+          class="group bg-gradient-to-br from-red-400 to-pink-500 p-8 rounded-3xl hover:shadow-2xl hover:-translate-y-3 hover:scale-105 transition-all duration-500 text-white"
+        >
+          <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <!-- First star -->
+              <path d="M8 2l1.5 3L12 6l-2.5 1L8 10l-1.5-3L4 6l2.5-1L8 2z" opacity="0.7"/>
+              <!-- Second star (main) -->
+              <path d="M16 8l2.5 5L24 14.5l-5.5 2.5L16 22l-2.5-5L8 14.5l5.5-2.5L16 8z"/>
+            </svg>
+          </div>
+          <h3 class="text-2xl font-bold mb-4">{t.hard}</h3>
+          <p class="opacity-90 text-lg mb-4">{t.expertLevel}</p>
+          <div class="bg-white/20 rounded-xl p-4">
+            <p class="text-sm opacity-90">• {t.advancedQuestions}</p>
+            <p class="text-sm opacity-90">• {t.pointsPerCorrectAnswer15}</p>
+            <p class="text-sm opacity-90">• {t.testYourKnowledge}</p>
+          </div>
+        </button>
+
+      </div>
+    </div>
+  </div>
+
 {/if}
 
 <!-- Modals -->
@@ -2203,13 +2802,13 @@
         <div class="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Book class="w-8 h-8 text-white" />
         </div>
-        <h3 class="text-2xl font-bold {currentTheme.text} mb-2">Tafsir Moment</h3>
-        <p class="{currentTheme.text} opacity-60">Learn from this moment</p>
+        <h3 class="text-2xl font-bold {currentTheme.text} mb-2">{$currentLanguage.code === 'ar' ? 'لحظة تفسير' : 'Tafsir Moment'}</h3>
+        <p class="{currentTheme.text} opacity-60">{$currentLanguage.code === 'ar' ? 'تعلم من هذه اللحظة' : 'Learn from this moment'}</p>
       </div>
       
       <div class="space-y-4">
         <div class="bg-gradient-to-r from-blue-100/20 to-purple-100/20 rounded-2xl p-6">
-          <h4 class="font-semibold {currentTheme.text} mb-3">Explanation</h4>
+          <h4 class="font-semibold {currentTheme.text} mb-3">{t.explanation}</h4>
           <p class="{currentTheme.text} opacity-80 leading-relaxed">
             {tafsirContent.explanation}
           </p>
@@ -2217,7 +2816,7 @@
         
         {#if tafsirContent.hadith}
           <div class="bg-gradient-to-r from-amber-100/20 to-orange-100/20 rounded-2xl p-6">
-            <h4 class="font-semibold {currentTheme.text} mb-3">Related Hadith</h4>
+            <h4 class="font-semibold {currentTheme.text} mb-3">{t.relatedHadith}</h4>
             <p class="{currentTheme.text} opacity-80 italic leading-relaxed">
               "{tafsirContent.hadith}"
             </p>
@@ -2226,7 +2825,7 @@
         
         {#if tafsirContent.verse}
           <div class="bg-gradient-to-r from-emerald-100/20 to-teal-100/20 rounded-2xl p-6">
-            <h4 class="font-semibold {currentTheme.text} mb-3">Related Verse</h4>
+            <h4 class="font-semibold {currentTheme.text} mb-3">{$currentLanguage.code === 'ar' ? 'الآية ذات الصلة' : 'Related Verse'}</h4>
             <p class="{currentTheme.text} opacity-80 leading-relaxed">
               {tafsirContent.verse}
             </p>

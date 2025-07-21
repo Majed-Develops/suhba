@@ -16,11 +16,12 @@
     currentLanguage.setLanguage(lang);
   }
   
-  let themes = [
-    { id: 'desert', name: 'Desert', emoji: '🏜️' },
-    { id: 'scroll', name: 'Scroll', emoji: '📜' },
-    { id: 'midnight', name: 'Midnight', emoji: '🌙' }
-  ];
+  // Reactive theme names that update with language changes
+  const themes = $derived([
+    { id: 'desert', name: t.themeDesert, emoji: '🏜️' },
+    { id: 'scroll', name: t.themeScroll, emoji: '📜' },
+    { id: 'midnight', name: t.themeMidnight, emoji: '🌙' }
+  ]);
 </script>
 
 {#if isOpen}
@@ -58,7 +59,17 @@
               }"
             >
               <div class="flex items-center space-x-3 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
-                <span class="text-xl">{lang.flag}</span>
+                {#if lang.code === 'en'}
+                  <svg class="w-6 h-6" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="#3B82F6"/>
+                    <text x="12" y="16" text-anchor="middle" class="text-xs font-bold fill-white">EN</text>
+                  </svg>
+                {:else}
+                  <svg class="w-6 h-6" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="#10B981"/>
+                    <text x="12" y="16" text-anchor="middle" class="text-xs font-bold fill-white">AR</text>
+                  </svg>
+                {/if}
                 <span class="font-medium text-gray-800">{lang.name}</span>
               </div>
               {#if $currentLanguage.code === lang.code}
