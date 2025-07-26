@@ -22,6 +22,10 @@
   import UserGlasses from '$lib/components/UserGlasses.svelte';
   import UserKeffiyeh from '$lib/components/UserKeffiyeh.svelte';
   import SeerahTrip from '$lib/components/SeerahTrip.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import ToastContainer from '$lib/components/ToastContainer.svelte';
+  import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
+  import { toastManager } from '$lib/stores/toast';
 
   // Reactive state using Svelte 5 runes
   let currentScreen = $state('home');
@@ -52,6 +56,11 @@
   let isRoomHost = $state(false);
   let roomPlayers = $state([]);
   let showCopyMessage = $state(false);
+  
+  // Loading states for better UX
+  let isCreatingRoom = $state(false);
+  let isJoiningRoom = $state(false);
+  let isLoadingGame = $state(false);
   
   // Language and translations - simplified to avoid store conflicts
   const t = $derived((translations && translations[$currentLanguage.code]) ? translations[$currentLanguage.code] : {});
@@ -628,39 +637,61 @@
     return gameQuizMapping[gameId] || 'ghareeb'; // default to ghareeb
   }
 
-  function createRoom() {
-    roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    isRoomHost = true;
-    roomPlayers = ['Host']; // Add host as first player
-    gameMode = 'team';
-    previousScreen = 'suhbaSelector';
-    currentScreen = 'createRoomGameSelector';
+  async function createRoom() {
+    if (isCreatingRoom) return; // Prevent double-click
     
-    // Connect to WebSocket backend if not already connected
-    if (!$connectionState.connected) {
-      wsManager.connect();
+    isCreatingRoom = true;
+    try {
+      roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      isRoomHost = true;
+      roomPlayers = ['Host']; // Add host as first player
+      gameMode = 'team';
+      previousScreen = 'suhbaSelector';
+      
+      // Connect to WebSocket backend if not already connected
+      if (!$connectionState.connected) {
+        await wsManager.connect();
+      }
+      
+      // Small delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      currentScreen = 'createRoomGameSelector';
+      console.log('🎯 HOST created room:', roomCode, '- isRoomHost:', isRoomHost);
+      toastManager.showSuccess(`Room ${roomCode} created successfully!`);
+    } catch (error) {
+      console.error('Failed to create room:', error);
+      const errorMsg = $connectionState.error || 'Failed to create room. Please try again.';
+      toastManager.showError(errorMsg);
+    } finally {
+      isCreatingRoom = false;
     }
-    
-    // Create room in backend (will be called when a game is selected)
-    console.log('🎯 HOST created room:', roomCode, '- isRoomHost:', isRoomHost);
   }
   
   async function joinRoom() {
-    if (roomCode.trim()) {
+    if (!roomCode.trim() || isJoiningRoom) return; // Prevent invalid/double attempts
+    
+    isJoiningRoom = true;
+    try {
       isRoomHost = false;
-      // Don't simulate players anymore - let WebSocket handle real player management
       gameMode = 'team';
       
-      try {
-        // Join room in backend - use default quiz type, backend will handle the actual room type
-        await wsManager.joinRoom(roomCode, 'ghareeb');
-        console.log('👥 PLAYER joined room:', roomCode, '- isRoomHost:', isRoomHost);
-        
-        currentScreen = 'roomLobby';
-      } catch (error) {
-        console.error('Failed to join room:', error);
-        // Handle connection error - maybe show error message to user
+      // Connect to WebSocket backend if not already connected
+      if (!$connectionState.connected) {
+        await wsManager.connect();
       }
+      
+      // Join room in backend - use default quiz type, backend will handle the actual room type
+      await wsManager.joinRoom(roomCode, 'ghareeb');
+      console.log('👥 PLAYER joined room:', roomCode, '- isRoomHost:', isRoomHost);
+      toastManager.showSuccess(`Successfully joined room ${roomCode}!`);
+      
+      currentScreen = 'roomLobby';
+    } catch (error) {
+      console.error('Failed to join room:', error);
+      toastManager.showError(`Failed to join room ${roomCode}. Please check the code and try again.`);
+    } finally {
+      isJoiningRoom = false;
     }
   }
   
@@ -691,17 +722,22 @@
     if (isRoomHost) {
       return 'Host';
     } else {
-      // For non-host players, use a consistent approach
-      // In a real implementation, you'd want to track this in the backend
+      // For non-host players, determine position based on room state
       const playerNames = $roomState.players.length > 0 ? $roomState.players : players;
       
-      // Simple approach: assign based on connection order
-      // Host is always index 0, so non-host players get subsequent positions
-      const nonHostPlayers = playerNames.filter(p => p !== 'Host');
+      if (playerNames.length <= 1) {
+        return 'Player 2'; // Default for second player
+      }
       
-      // For now, use client ID to make it more consistent across sessions
-      const myIndex = Math.abs(clientId.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % nonHostPlayers.length;
-      return nonHostPlayers[myIndex] || 'Player 2';
+      // Use client ID to consistently determine player position
+      const availableSlots = playerNames.filter(p => p !== 'Host');
+      if (availableSlots.length === 0) {
+        return 'Player 2';
+      }
+      
+      // More reliable player identification
+      const myIndex = Math.abs(clientId.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % Math.max(1, availableSlots.length);
+      return availableSlots[myIndex] || `Player ${Math.min(playerNames.length + 1, 6)}`;
     }
   }
 
@@ -711,7 +747,17 @@
       return false; // In solo mode or offline, always allow answering
     }
     
-    const myPlayerIndex = players.findIndex(p => p === getMyPlayerName());
+    const myName = getMyPlayerName();
+    const playerNames = $roomState.players.length > 0 ? $roomState.players : players;
+    const myPlayerIndex = playerNames.findIndex(p => p === myName);
+    
+    console.log(`🎯 Turn check - My name: ${myName}, My index: ${myPlayerIndex}, Current player: ${currentPlayer}, Players: ${JSON.stringify(playerNames)}`);
+    
+    // If player not found in list, assume it's their turn (fallback)
+    if (myPlayerIndex === -1) {
+      return false;
+    }
+    
     return myPlayerIndex !== currentPlayer;
   }
 
@@ -1200,29 +1246,38 @@
 
 {#if currentScreen === 'home'}
   {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
-  {@const SettingsIcon = settingsIcon || Settings}
-  <div class="min-h-screen {currentTheme.bg} flex flex-col items-center justify-center p-6 relative overflow-hidden">
-    <!-- User Button - Left Side -->
+  {@const SettingsIcon = settingsIcon() || Settings}
+  <!-- Fixed positioning ensures these elements are positioned relative to viewport, not this container -->
+  <div class="min-h-screen {currentTheme.bg} flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    
+    <!-- User Button - Fixed to viewport top-left, theme-based styling -->
     <button
       onclick={() => showAuth = true}
-      class="absolute top-6 left-6 z-20 flex items-center space-x-2 {currentTheme.loginBg} rounded-xl px-4 py-2 {currentTheme.loginText} {currentTheme.loginHoverText} {currentTheme.loginHoverBg} transition-all duration-300"
+      class="flex items-center space-x-2 px-4 py-2 rounded-xl font-medium transition-all duration-300 outline-none hover:shadow-lg"
+      style="position: fixed !important; top: 16px !important; left: 16px !important; z-index: 999 !important; transform: none !important; 
+        {theme === 'midnight' ? 'background: rgba(255, 255, 255, 0.9); color: #1f2937; border: 1px solid rgba(255, 255, 255, 0.2);' : 
+         theme === 'desert' ? 'background: rgba(101, 67, 33, 0.9); color: white; border: 1px solid rgba(101, 67, 33, 0.3);' :
+         'background: rgba(139, 116, 91, 0.9); color: white; border: 1px solid rgba(139, 116, 91, 0.3);'}"
+      aria-label="User login and profile - {loginButtonProps.text}"
     >
-      <LoginIcon class="w-5 h-5 {currentTheme.suhbaColor}" />
-      <span class="font-medium {currentTheme.suhbaColor}">{loginButtonProps.text}</span>
+      <LoginIcon class="w-5 h-5" />
+      <span>{loginButtonProps.text}</span>
     </button>
     
-    <!-- Salah Timer - Center Right -->
-    <div class="absolute top-6 right-24 z-20">
+    <!-- Top Right Controls - Salah Timer and Settings -->
+    <div class="fixed top-4 right-4 sm:top-6 sm:right-6 z-40 flex items-center space-x-3">
       <SalahTimer {currentTheme} {theme} />
+      <button
+        onclick={() => showSettings = true}
+        class="p-3 rounded-xl transition-all duration-300 outline-none hover:shadow-lg"
+        style="{theme === 'midnight' ? 'background: rgba(255, 255, 255, 0.9); color: #1f2937; border: 1px solid rgba(255, 255, 255, 0.2);' : 
+                theme === 'desert' ? 'background: rgba(101, 67, 33, 0.9); color: white; border: 1px solid rgba(101, 67, 33, 0.3);' :
+                'background: rgba(139, 116, 91, 0.9); color: white; border: 1px solid rgba(139, 116, 91, 0.3);'}"
+        aria-label="Open settings - Language and theme options"
+      >
+        <SettingsIcon class="w-5 h-5" />
+      </button>
     </div>
-    
-    <!-- Settings Button -->
-    <button
-      onclick={() => showSettings = true}
-      class="absolute top-6 right-6 z-20 bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
-    >
-      <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
-    </button>
 
     <!-- Background decoration -->
     <div class="absolute inset-0 opacity-5">
@@ -1231,60 +1286,75 @@
       <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full blur-3xl"></div>
     </div>
 
-    <div class="text-center mb-16 relative z-10">
+    <div class="text-center mb-8 sm:mb-16 relative z-10 pt-8 sm:pt-0">
       <div class="mb-6">
         <div class="mx-auto mb-6 transform hover:scale-105 transition-transform duration-300">
           <SuhbaLogo size="120px" className="drop-shadow-2xl" />
         </div>
       </div>
-      <h1 class="text-7xl font-light {currentTheme.suhbaColor} mb-4 font-serif tracking-wide">{t.appTitle}</h1>
-      <p class="{currentTheme.text} opacity-80 text-xl font-medium">{t.appTagline}</p>
+      <h1 class="text-4xl sm:text-6xl lg:text-7xl font-light {currentTheme.suhbaColor} mb-4 font-serif tracking-wide">{t.appTitle}</h1>
+      <p class="{currentTheme.text} opacity-80 text-lg sm:text-xl font-medium">{t.appTagline}</p>
       <div class="w-24 h-1 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full mx-auto mt-4"></div>
     </div>
 
-    <div class="space-y-6 w-full max-w-sm relative z-10">
-      <button
+    <div class="space-y-4 sm:space-y-6 w-full max-w-xs sm:max-w-sm relative z-10 px-4 sm:px-0">
+      <Button
+        variant="primary"
+        size="lg"
+        class="w-full"
         onclick={() => currentScreen = 'modeSelector'}
-        class="group w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white py-6 px-8 rounded-3xl font-semibold text-lg shadow-2xl hover:shadow-purple-500/25 transform hover:scale-105 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+        ariaLabel="{t.startGame} - {t.appTagline}"
       >
-        <div class="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        <div class="relative flex items-center justify-center space-x-3 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
-          <Play class="w-6 h-6" />
-          <span>{t.startGame}</span>
-        </div>
-      </button>
+        {#snippet children()}
+          <div class="flex items-center justify-center space-x-3 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
+            <Play class="w-6 h-6" />
+            <span>{t.startGame}</span>
+          </div>
+        {/snippet}
+      </Button>
 
-      <button
+      <Button
+        variant="secondary"
+        size="lg"
+        class="w-full"
         onclick={() => currentScreen = 'chillSelector'}
-        class="group w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white py-6 px-8 rounded-3xl font-semibold text-lg shadow-2xl hover:shadow-emerald-500/25 transform hover:scale-105 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+        ariaLabel="{t.chillTell} - Relaxed conversation topics"
       >
-        <div class="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        <div class="relative flex items-center justify-center space-x-3 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
-          <MessageCircle class="w-6 h-6" />
-          <span>{t.chillTell}</span>
-        </div>
-      </button>
+        {#snippet children()}
+          <div class="flex items-center justify-center space-x-3 {$currentLanguage.direction === 'rtl' ? 'space-x-reverse' : ''}">
+            <MessageCircle class="w-6 h-6" />
+            <span>{t.chillTell}</span>
+          </div>
+        {/snippet}
+      </Button>
     </div>
 
     <div class="mt-16 relative z-10">
-      <button
+      <Button
+        variant="theme"
+        size="sm"
         onclick={cycleTheme}
-        class="{currentTheme.text} opacity-60 hover:opacity-100 transition-all duration-300 text-sm flex items-center space-x-2 px-4 py-2 rounded-full {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
+        ariaLabel="Change theme - Currently {theme === 'desert' ? t.themeDesert : theme === 'scroll' ? t.themeScroll : t.themeMidnight}"
+        class="text-sm"
       >
-        {#if theme === 'desert'}
-          <Sun class="w-4 h-4" />
-        {:else if theme === 'scroll'}
-          <Scroll class="w-4 h-4" />
-        {:else}
-          <Moon class="w-4 h-4" />
-        {/if}
-        <span>{t.theme}: {theme === 'desert' ? t.themeDesert : theme === 'scroll' ? t.themeScroll : t.themeMidnight}</span>
-      </button>
+        {#snippet children()}
+          <div class="flex items-center space-x-2">
+            {#if theme === 'desert'}
+              <Sun class="w-4 h-4" />
+            {:else if theme === 'scroll'}
+              <Scroll class="w-4 h-4" />
+            {:else}
+              <Moon class="w-4 h-4" />
+            {/if}
+            <span>{t.theme}: {theme === 'desert' ? t.themeDesert : theme === 'scroll' ? t.themeScroll : t.themeMidnight}</span>
+          </div>
+        {/snippet}
+      </Button>
     </div>
   </div>
 
 {:else if currentScreen === 'modeSelector'}
-  {@const SettingsIcon = settingsIcon || Settings}
+  {@const SettingsIcon = settingsIcon() || Settings}
   {@const BackIcon = backButtonProps?.icon || ChevronLeft}
   {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
@@ -1357,21 +1427,42 @@
   </div>
 
 {:else if currentScreen === 'suhbaSelector'}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   {@const BackIcon = backButtonProps.icon}
+  {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
-    <!-- Settings and Salah Timer -->
-    <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
-      <div></div>
-      <SalahTimer {currentTheme} {theme} />
-    </div>
     
-    <button
-      onclick={() => showSettings = true}
-      class="absolute top-6 right-6 z-20 bg-white/10 backdrop-blur-sm rounded-xl p-3 text-white/90 hover:text-white hover:bg-white/20 transition-all duration-300"
+    <!-- User Button - Top Left -->
+    <Button
+      variant="glass"
+      size="sm"
+      onclick={() => showAuth = true}
+      class="absolute top-4 left-4 sm:top-6 sm:left-6 z-20"
+      ariaLabel="User login and profile - {loginButtonProps.text}"
     >
-      <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
-    </button>
+      {#snippet children()}
+        <div class="flex items-center space-x-2">
+          <LoginIcon class="w-5 h-5" />
+          <span class="font-medium">{loginButtonProps.text}</span>
+        </div>
+      {/snippet}
+    </Button>
+    
+    <!-- Top Right Controls - Salah Timer and Settings -->
+    <div class="absolute top-4 right-4 sm:top-6 sm:right-6 z-20 flex items-center space-x-3">
+      <SalahTimer {currentTheme} {theme} />
+      <Button
+        variant="glass"
+        size="sm"
+        onclick={() => showSettings = true}
+        class="p-3"
+        ariaLabel="Open settings - Language and theme options"
+      >
+        {#snippet children()}
+          <SettingsIcon class="w-5 h-5" />
+        {/snippet}
+      </Button>
+    </div>
     
     <!-- Background decoration -->
     <div class="absolute inset-0 opacity-5">
@@ -1379,38 +1470,45 @@
       <div class="absolute bottom-20 left-20 w-40 h-40 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-3xl"></div>
     </div>
 
-    <div class="max-w-5xl mx-auto relative z-10">
+    <div class="max-w-5xl mx-auto relative z-10 pt-16">
       <div class="flex items-center justify-between mb-12">
         <button
-          onclick={() => currentScreen = 'suhbaSelector'}
-          class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
+          onclick={() => currentScreen = 'modeSelector'}
+          class="flex items-center space-x-2 {currentTheme.text} opacity-90 hover:opacity-100 transition-all duration-300 px-6 py-3 rounded-xl {currentTheme.cardBg} {currentTheme.border} border-2 backdrop-blur-sm hover:shadow-lg hover:scale-105 focus-ring-improved interactive-card"
+          aria-label="Go back to mode selection"
         >
-          <BackIcon class="w-5 h-5 {currentTheme.iconColor}" />
-          <span>{backButtonProps.text}</span>
+          <BackIcon class="w-5 h-5 {currentTheme.text}" />
+          <span class="font-semibold">{backButtonProps.text}</span>
         </button>
         <h2 class="text-3xl font-bold {currentTheme.text}">{t.teamPlay}</h2>
-        <div></div>
+        <div class="w-24"></div>
       </div>
 
       <!-- Room Options -->
       <div class="mb-8">
         <h3 class="text-2xl font-bold {currentTheme.text} mb-6 text-center">{t.roomOptions}</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
           <!-- Create Room -->
-          <button
+          <Button
+            variant="primary"
             onclick={createRoom}
-            class="group bg-gradient-to-br from-purple-400 to-pink-500 p-6 rounded-3xl hover:shadow-2xl hover:-translate-y-3 hover:scale-105 transition-all duration-500 text-white"
+            loading={isCreatingRoom}
+            disabled={isCreatingRoom}
+            class="group bg-gradient-to-br from-purple-400 to-pink-500 p-6 text-white card-hover"
+            ariaLabel="Create new room - {t.invitePlayers}"
           >
-            <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-              <Plus class="w-8 h-8 text-white" />
-            </div>
-            <h4 class="text-xl font-bold mb-2">{t.createRoom}</h4>
-            <p class="text-sm opacity-90">{t.invitePlayers}</p>
-          </button>
+            {#snippet children()}
+              <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 smooth-transition">
+                <Plus class="w-8 h-8 text-white" />
+              </div>
+              <h4 class="text-xl font-bold mb-2">{t.createRoom}</h4>
+              <p class="text-sm opacity-90">{t.invitePlayers}</p>
+            {/snippet}
+          </Button>
           
           <!-- Join Room -->
-          <div class="group bg-gradient-to-br from-teal-400 to-cyan-500 p-6 rounded-3xl hover:shadow-2xl hover:-translate-y-3 hover:scale-105 transition-all duration-500 text-white">
-            <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
+          <div class="group bg-gradient-to-br from-teal-400 to-cyan-500 p-6 rounded-3xl card-hover text-white">
+            <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 smooth-transition">
               <UserPlus class="w-8 h-8 text-white" />
             </div>
             <h4 class="text-xl font-bold mb-4">{t.joinRoom}</h4>
@@ -1419,16 +1517,24 @@
                 type="text"
                 bind:value={roomCode}
                 placeholder="{t.roomCodePlaceholder}"
-                class="w-full p-3 rounded-xl border-2 border-white/20 bg-white/10 text-white placeholder-white/60 backdrop-blur-sm focus:border-white/40 transition-colors text-center"
+                class="w-full p-3 rounded-xl border-2 border-white/20 bg-white/10 text-white placeholder-white/60 backdrop-blur-sm focus:border-white/40 focus-ring text-center smooth-transition"
                 maxlength="6"
+                disabled={isJoiningRoom}
+                aria-label="Enter room code"
               />
-              <button
+              <Button
+                variant="glass"
+                size="sm"
                 onclick={joinRoom}
-                disabled={!roomCode.trim()}
-                class="w-full bg-white/20 backdrop-blur-sm text-white py-2 px-4 rounded-xl hover:bg-white/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                loading={isJoiningRoom}
+                disabled={!roomCode.trim() || isJoiningRoom}
+                class="w-full text-white"
+                ariaLabel="Join room with code {roomCode}"
               >
-                {t.joinRoom}
-              </button>
+                {#snippet children()}
+                  {t.joinRoom}
+                {/snippet}
+              </Button>
             </div>
           </div>
           
@@ -1457,7 +1563,7 @@
 {:else if currentScreen === 'createRoomGameSelector'}
   {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
   {@const BackIcon = backButtonProps?.icon || ChevronLeft}
-  {@const SettingsIcon = settingsIcon || Settings}
+  {@const SettingsIcon = settingsIcon() || Settings}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden">
     <!-- User Button - Left Side -->
     <div class="absolute top-6 left-6 z-20">
@@ -1546,7 +1652,7 @@
 {:else if currentScreen === 'gameSelector'}
   {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
   {@const BackIcon = backButtonProps?.icon || ChevronLeft}
-  {@const SettingsIcon = settingsIcon || Settings}
+  {@const SettingsIcon = settingsIcon() || Settings}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden">
     <!-- User Button - Left Side -->
     <button
@@ -1613,7 +1719,7 @@
   </div>
 
 {:else if currentScreen === 'chillSelector'}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   {@const BackIcon = backButtonProps.icon}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
@@ -1635,17 +1741,18 @@
       <div class="absolute bottom-20 right-20 w-40 h-40 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full blur-3xl"></div>
     </div>
 
-    <div class="max-w-5xl mx-auto relative z-10">
+    <div class="max-w-5xl mx-auto relative z-10 pt-16">
       <div class="flex items-center justify-between mb-12">
         <button
           onclick={() => currentScreen = 'home'}
-          class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
+          class="flex items-center space-x-2 {currentTheme.text} opacity-90 hover:opacity-100 transition-all duration-300 px-6 py-3 rounded-xl {currentTheme.cardBg} {currentTheme.border} border-2 backdrop-blur-sm hover:shadow-lg hover:scale-105 focus-ring-improved interactive-card"
+          aria-label="Go back to home screen"
         >
-          <BackIcon class="w-5 h-5 {currentTheme.iconColor}" />
-          <span>{backButtonProps.text}</span>
+          <BackIcon class="w-5 h-5 {currentTheme.text}" />
+          <span class="font-semibold">{backButtonProps.text}</span>
         </button>
         <h2 class="text-3xl font-bold {currentTheme.text}">Choose a Category</h2>
-        <div></div>
+        <div class="w-24"></div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -1671,7 +1778,7 @@
 
 {:else if currentScreen === 'playing'}
   {@const BackIcon = backButtonProps.icon}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   {@const CurrentGameIcon = currentGame.icon}
   <!-- Unified playing screen with settings and salah timer -->
   <div class="min-h-screen {currentTheme.bg} relative overflow-hidden" dir="{'ltr'}">
@@ -2059,7 +2166,7 @@
   </div>
 
 {:else if currentScreen === 'roomLobby'}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   {@const BackIcon = backButtonProps.icon}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
@@ -2181,7 +2288,7 @@
   </div>
 
 {:else if currentScreen === 'teamSetup'}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   {@const BackIcon = backButtonProps.icon}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
@@ -2197,17 +2304,18 @@
       <SettingsIcon class="w-5 h-5 {currentTheme.iconColor}" />
     </button>
     
-    <div class="max-w-2xl mx-auto relative z-10">
+    <div class="max-w-2xl mx-auto relative z-10 pt-16">
       <div class="flex items-center justify-between mb-12">
         <button
           onclick={() => currentScreen = 'suhbaSelector'}
-          class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
+          class="flex items-center space-x-2 {currentTheme.text} opacity-90 hover:opacity-100 transition-all duration-300 px-6 py-3 rounded-xl {currentTheme.cardBg} {currentTheme.border} border-2 backdrop-blur-sm hover:shadow-lg hover:scale-105 focus-ring-improved interactive-card"
+          aria-label="Go back to Suhba mode selection"
         >
           <BackIcon class="w-5 h-5 {currentTheme.iconColor}" />
-          <span>{backButtonProps.text}</span>
+          <span class="font-semibold">{backButtonProps.text}</span>
         </button>
         <h2 class="text-3xl font-bold {currentTheme.text}">{t.teamSetup}</h2>
-        <div></div>
+        <div class="w-24"></div>
       </div>
 
       <div class="{currentTheme.cardBg} {currentTheme.border} border-2 rounded-3xl p-8 backdrop-blur-sm">
@@ -2378,7 +2486,7 @@
   {/if}
 
 {:else if currentScreen === 'gameComplete'}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
     <!-- Settings and Salah Timer -->
     <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
@@ -2513,7 +2621,7 @@
 {:else if currentScreen === 'seerahTrip'}
   <SeerahTrip onBack={() => currentScreen = 'gameSelector'} />
 {:else if currentScreen === 'gameMode'}
-  {@const SettingsIcon = settingsIcon}
+  {@const SettingsIcon = settingsIcon()}
   {@const BackIcon = backButtonProps.icon}
   {@const CurrentGameIcon = currentGame.icon}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
@@ -2665,7 +2773,7 @@
   {@const BackIcon = backButtonProps?.icon || ChevronLeft}
   {@const CurrentGameIcon = currentGame?.icon || User}
   {@const LoginIcon = loginButtonProps?.icon || UserShmagh}
-  {@const SettingsIcon = settingsIcon || Settings}
+  {@const SettingsIcon = settingsIcon() || Settings}
   <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden">
     <!-- User Button - Left Side -->
     <button
@@ -2853,5 +2961,13 @@
       <span class="font-semibold">{rewardMessage}</span>
     </div>
   </div>
+{/if}
+
+<!-- Toast Notifications -->
+<ToastContainer />
+
+<!-- Connection Status Indicator - Only show during multiplayer modes -->
+{#if gameMode === 'team' || currentScreen === 'suhbaSelector' || currentScreen === 'roomLobby' || currentScreen === 'createRoomGameSelector'}
+  <ConnectionStatus position="top-right" size="md" />
 {/if}
 

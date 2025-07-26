@@ -95,9 +95,20 @@ class WebSocketManager {
       this.ws.onerror = (error) => {
         console.error('❌ WebSocket error:', error);
         console.error('❌ WebSocket URL was:', url);
+        
+        // Provide more user-friendly error messages
+        let errorMessage = 'Connection failed';
+        if (url.includes('localhost')) {
+          errorMessage = 'Server not running - Please start the backend server';
+        } else if (!navigator.onLine) {
+          errorMessage = 'No internet connection';
+        } else {
+          errorMessage = 'Unable to connect to game server';
+        }
+        
         connectionState.update(state => ({ 
           ...state, 
-          error: 'Connection failed - Check if backend is running on port 3005',
+          error: errorMessage,
           connecting: false 
         }));
         this.connectionPromise = null;
