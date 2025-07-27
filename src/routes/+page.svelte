@@ -8,7 +8,7 @@
     Compass, Target, FileText, Volume2, BookOpen, List, 
     UserPlus, Globe, Shuffle, 
     Cog, Settings2, Wrench, ChevronLeft, ChevronRight, CornerUpLeft,
-    History, Link, Layers
+    History, Link, Layers, HelpCircle
   } from 'lucide-svelte';
   import { currentLanguage } from '$lib/stores/language';
   import { translations } from '$lib/stores/translations';
@@ -22,6 +22,10 @@
   import UserGlasses from '$lib/components/UserGlasses.svelte';
   import UserKeffiyeh from '$lib/components/UserKeffiyeh.svelte';
   import SeerahTrip from '$lib/components/SeerahTrip.svelte';
+  import LastScholarStanding from '$lib/components/LastScholarStanding.svelte';
+  import LightningIjaza from '$lib/components/LightningIjaza.svelte';
+  import HadithCompletion from '$lib/components/HadithCompletion.svelte';
+  import DawahChallenge from '$lib/components/DawahChallenge.svelte';
   import Button from '$lib/components/Button.svelte';
   import ToastContainer from '$lib/components/ToastContainer.svelte';
   import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
@@ -143,6 +147,10 @@
   let gameLoop = $state(null);
   let gamePaused = $state(false); // General pause state for all games
   let lastSpawn = $state(0);
+  
+  // Help popup states
+  let showGameHelp = $state(false);
+  let selectedHelpGame = $state(null);
   let difficultyTimer = $state(0);
   let consecutiveHits = $state(0);
   let shieldActive = $state(false);
@@ -195,7 +203,13 @@
     { id: 'seerahTrip', nameKey: 'seerahTrip', name: 'Seerah Trip', icon: Compass, gradient: 'from-yellow-400 via-orange-400 to-amber-500', shadow: 'shadow-yellow-500/25', soloOnly: true },
     
     // Reflex Games (Solo Only)
-    { id: 'imanDefender', nameKey: 'imanDefender', icon: Shield, gradient: 'from-orange-400 via-red-400 to-pink-400', shadow: 'shadow-orange-500/25', soloOnly: true }
+    { id: 'imanDefender', nameKey: 'imanDefender', icon: Shield, gradient: 'from-orange-400 via-red-400 to-pink-400', shadow: 'shadow-orange-500/25', soloOnly: true },
+    
+    // New Competition Games
+    { id: 'lastScholarStanding', nameKey: 'lastScholarStanding', icon: Crown, gradient: 'from-yellow-400 via-orange-400 to-red-400', shadow: 'shadow-yellow-500/25', suhbaOnly: true },
+    { id: 'lightningIjaza', nameKey: 'lightningIjaza', icon: Zap, gradient: 'from-yellow-400 via-amber-400 to-orange-400', shadow: 'shadow-yellow-500/25', suhbaOnly: true },
+    { id: 'hadithCompletion', nameKey: 'hadithCompletion', icon: BookOpen, gradient: 'from-green-400 via-emerald-400 to-teal-400', shadow: 'shadow-green-500/25' },
+    { id: 'dawahChallenge', nameKey: 'dawahChallenge', icon: MessageCircle, gradient: 'from-blue-400 via-purple-400 to-indigo-400', shadow: 'shadow-blue-500/25', suhbaOnly: true }
   ];
 
   // Add translated names to game types
@@ -208,7 +222,7 @@
   const availableGames = $derived(
     gameMode === 'team' 
       ? (gameTypes || []).filter(game => !game.soloOnly)
-      : (gameTypes || [])
+      : (gameTypes || []).filter(game => !game.suhbaOnly)
   );
   
 
@@ -216,6 +230,7 @@
     { id: 'prophets', name: 'Prophets Stories', icon: Star, gradient: 'from-purple-400 via-indigo-400 to-blue-400', shadow: 'shadow-purple-500/25' },
     { id: 'sahaba', name: 'Sahaba Stories', icon: Users, gradient: 'from-emerald-400 via-green-400 to-teal-400', shadow: 'shadow-emerald-500/25' }
   ]);
+
 
   const themes = {
     desert: {
@@ -304,6 +319,13 @@
     isFlipped = false;
   }
 
+  function goBackToChillSelector() {
+    console.log('🔙 Going back to chill selector');
+    currentScreen = 'chillSelector';
+    chillCategory = null;
+    isFlipped = false;
+  }
+
   function handleCorrect() {
     score++;
     round++;
@@ -365,6 +387,17 @@
   }
 
 
+  function showHelp(game, event) {
+    event.stopPropagation(); // Prevent card click
+    selectedHelpGame = game;
+    showGameHelp = true;
+  }
+
+  function closeHelp() {
+    showGameHelp = false;
+    selectedHelpGame = null;
+  }
+
   function startGame(game) {
     // Safety check for game object
     if (!game || !game.id) {
@@ -386,6 +419,14 @@
       currentScreen = 'gameMode';
     } else if (game.id === 'seerahTrip') {
       currentScreen = 'seerahTrip';
+    } else if (game.id === 'lastScholarStanding') {
+      currentScreen = 'lastScholarStanding';
+    } else if (game.id === 'lightningIjaza') {
+      currentScreen = 'lightningIjaza';
+    } else if (game.id === 'hadithCompletion') {
+      currentScreen = 'hadithCompletion';
+    } else if (game.id === 'dawahChallenge') {
+      currentScreen = 'dawahChallenge';
     } else if (game.id === 'imanDefender') {
       currentScreen = 'playing';
       initializeImanDefender();
@@ -423,6 +464,30 @@
       // For Seerah Scenarios in prophetic decisions mode
       if (newGameContent.seerahScenarios?.propheticDecisions) {
         gameQuestions = [...newGameContent.seerahScenarios.propheticDecisions];
+        shuffleArray(gameQuestions);
+      }
+    } else if (gameId === 'lastScholarStanding') {
+      // Last Scholar Standing uses its own question format
+      if (newGameContent.lastScholarStanding?.questions) {
+        gameQuestions = [...newGameContent.lastScholarStanding.questions];
+        shuffleArray(gameQuestions);
+      }
+    } else if (gameId === 'lightningIjaza') {
+      // Lightning Ijaza uses its own question format
+      if (newGameContent.lightningIjaza?.questions) {
+        gameQuestions = [...newGameContent.lightningIjaza.questions];
+        shuffleArray(gameQuestions);
+      }
+    } else if (gameId === 'hadithCompletion') {
+      // Hadith Completion uses hadith data
+      if (newGameContent.hadithCompletion?.hadiths) {
+        gameQuestions = [...newGameContent.hadithCompletion.hadiths];
+        shuffleArray(gameQuestions);
+      }
+    } else if (gameId === 'dawahChallenge') {
+      // Dawah Challenge uses challenge data
+      if (newGameContent.dawahChallenge?.challenges) {
+        gameQuestions = [...newGameContent.dawahChallenge.challenges];
         shuffleArray(gameQuestions);
       }
     } else if (newGameContent[gameId]) {
@@ -1636,6 +1701,18 @@
             class="group relative bg-gradient-to-br {game.gradient} p-8 rounded-3xl hover:shadow-2xl {game.shadow} hover:-translate-y-3 hover:scale-105 transition-all duration-500 overflow-hidden"
           >
             <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            
+            <!-- Help Icon -->
+            <div
+              onclick={(e) => showHelp(game, e)}
+              class="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 z-10 cursor-pointer"
+              title="Game Info"
+              role="button"
+              tabindex="0"
+            >
+              <HelpCircle class="w-4 h-4 text-white" />
+            </div>
+            
             <div class="relative">
               <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
                 <GameIcon class="w-8 h-8 text-white" />
@@ -1705,6 +1782,18 @@
             class="group relative bg-gradient-to-br {game.gradient} p-8 rounded-3xl hover:shadow-2xl {game.shadow} hover:-translate-y-3 hover:scale-105 transition-all duration-500 overflow-hidden"
           >
             <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            
+            <!-- Help Icon -->
+            <div
+              onclick={(e) => showHelp(game, e)}
+              class="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 z-10 cursor-pointer"
+              title="Game Info"
+              role="button"
+              tabindex="0"
+            >
+              <HelpCircle class="w-4 h-4 text-white" />
+            </div>
+            
             <div class="relative">
               <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
                 <GameIcon class="w-8 h-8 text-white" />
@@ -2387,8 +2476,7 @@
 {:else if currentScreen === 'chillTell'}
   {@const stories = chillContent[chillCategory?.id] || []}
   {@const story = stories[0]}
-  {#if story}
-    <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
+  <div class="min-h-screen {currentTheme.bg} p-6 relative overflow-hidden" dir="{'ltr'}">
       <!-- Settings and Salah Timer -->
       <div class="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
         <div></div>
@@ -2411,7 +2499,7 @@
       <div class="max-w-5xl mx-auto relative z-10">
         <div class="flex items-center justify-between mb-12">
           <button
-            onclick={() => currentScreen = 'chillSelector'}
+            onclick={goBackToChillSelector}
             class="flex items-center space-x-2 {currentTheme.text} opacity-70 hover:opacity-100 transition-all duration-300 px-4 py-2 rounded-xl {currentTheme.cardBg} {currentTheme.border} border backdrop-blur-sm"
           >
             <ArrowLeft class="w-5 h-5 {currentTheme.iconColor}" />
@@ -2421,6 +2509,7 @@
           <div></div>
         </div>
 
+        {#if story}
         <div class="mb-16">
           <div class="perspective-1000 w-full max-w-lg mx-auto">
             <div 
@@ -2481,9 +2570,15 @@
             </button>
           </div>
         {/if}
+        {/if}
+        
+        {#if !story}
+        <div class="text-center py-12">
+          <p class="{currentTheme.text} opacity-60">No story content available for this category.</p>
+        </div>
+        {/if}
       </div>
     </div>
-  {/if}
 
 {:else if currentScreen === 'gameComplete'}
   {@const SettingsIcon = settingsIcon()}
@@ -2620,6 +2715,45 @@
 
 {:else if currentScreen === 'seerahTrip'}
   <SeerahTrip onBack={() => currentScreen = 'gameSelector'} />
+{:else if currentScreen === 'lastScholarStanding'}
+  <LastScholarStanding 
+    {currentTheme} 
+    gameQuestions={gameQuestions} 
+    players={roomPlayers} 
+    onGameEnd={(winner) => {
+      console.log('Last Scholar Standing ended, winner:', winner);
+      currentScreen = 'gameSelector';
+    }} 
+  />
+{:else if currentScreen === 'lightningIjaza'}
+  <LightningIjaza 
+    {currentTheme} 
+    gameQuestions={gameQuestions} 
+    players={roomPlayers} 
+    onGameEnd={(results) => {
+      console.log('Lightning Ijaza ended, results:', results);
+      currentScreen = 'gameSelector';
+    }} 
+  />
+{:else if currentScreen === 'hadithCompletion'}
+  <HadithCompletion 
+    {currentTheme} 
+    gameQuestions={gameQuestions} 
+    players={roomPlayers} 
+    onGameEnd={(results) => {
+      console.log('Hadith Completion ended, results:', results);
+      currentScreen = 'gameSelector';
+    }} 
+  />
+{:else if currentScreen === 'dawahChallenge'}
+  <DawahChallenge 
+    {currentTheme} 
+    players={roomPlayers} 
+    onGameEnd={(results) => {
+      console.log('Dawah Challenge ended, results:', results);
+      currentScreen = 'gameSelector';
+    }} 
+  />
 {:else if currentScreen === 'gameMode'}
   {@const SettingsIcon = settingsIcon()}
   {@const BackIcon = backButtonProps.icon}
@@ -2959,6 +3093,112 @@
     <div class="flex items-center space-x-2">
       <Trophy class="w-5 h-5 {currentTheme.iconColor}" />
       <span class="font-semibold">{rewardMessage}</span>
+    </div>
+  </div>
+{/if}
+
+<!-- Game Help Popup -->
+{#if showGameHelp && selectedHelpGame}
+  {@const GameIcon = selectedHelpGame.icon}
+  <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="{currentTheme.cardBg} {currentTheme.border} border-2 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+      <!-- Header -->
+      <div class="bg-gradient-to-br {selectedHelpGame.gradient} p-6 text-white relative">
+        <div
+          onclick={closeHelp}
+          class="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer"
+          role="button"
+          tabindex="0"
+        >
+          <span class="text-white text-lg">×</span>
+        </div>
+        
+        <div class="text-center">
+          <div class="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <GameIcon class="w-8 h-8 text-white" />
+          </div>
+          <h2 class="text-2xl font-bold">{selectedHelpGame.name}</h2>
+        </div>
+      </div>
+      
+      <!-- Content -->
+      <div class="p-6">
+        <div class="mb-6">
+          <h3 class="font-bold {currentTheme.text} mb-3">How to Play:</h3>
+          <p class="{currentTheme.text} text-sm leading-relaxed opacity-80">
+            {t[selectedHelpGame.nameKey + 'Desc'] || 'Game description coming soon!'}
+          </p>
+        </div>
+        
+        <!-- Game Mode Info -->
+        <div class="grid grid-cols-1 gap-4 mb-6">
+          {#if gameMode === 'solo' || currentScreen === 'gameSelector'}
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <h4 class="font-bold text-blue-800 mb-2">Solo Play</h4>
+              <p class="text-blue-700 text-sm">
+                {#if selectedHelpGame.soloOnly}
+                  This is a solo-only game designed for individual practice and skill building.
+                {:else if selectedHelpGame.suhbaOnly}
+                  This game is designed for multiplayer interaction. Switch to Suhba Mode to play with others.
+                {:else}
+                  Test your knowledge individually with personal scoring and progress tracking.
+                {/if}
+              </p>
+            </div>
+          {:else if gameMode === 'team' || currentScreen === 'suhbaSelector'}
+            <div class="p-4 bg-green-50 border border-green-200 rounded-xl">
+              <h4 class="font-bold text-green-800 mb-2">Suhba Mode</h4>
+              <p class="text-green-700 text-sm">
+                {#if selectedHelpGame.soloOnly}
+                  This game is not available in multiplayer mode. Switch to Solo Play to enjoy it.
+                {:else if selectedHelpGame.suhbaOnly}
+                  Perfect! This game is designed specifically for multiplayer interaction and social gameplay.
+                {:else}
+                  Play with friends and family! Take turns, compete for points, and learn together.
+                {/if}
+              </p>
+            </div>
+          {/if}
+        </div>
+        
+        <!-- Game-specific tips -->
+        <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+          <h4 class="font-bold text-yellow-800 mb-2">💡 Tips</h4>
+          <div class="text-yellow-700 text-sm">
+            {#if selectedHelpGame.id === 'lastScholarStanding'}
+              <p>• Use power-ups wisely to survive elimination</p>
+              <p>• Difficulty increases each round</p>
+              <p>• Last player standing wins!</p>
+            {:else if selectedHelpGame.id === 'lightningIjaza'}
+              <p>• First to buzz gets to answer</p>
+              <p>• Wrong answers give penalties</p>
+              <p>• Speed and accuracy are key</p>
+            {:else if selectedHelpGame.id === 'hadithCompletion'}
+              <p>• Complete famous hadith texts</p>
+              <p>• Fill in missing words carefully</p>
+              <p>• Learn authentic Islamic teachings</p>
+            {:else if selectedHelpGame.id === 'dawahChallenge'}
+              <p>• Explain concepts to different audiences</p>
+              <p>• Adapt your language to the target</p>
+              <p>• Practice your dawah skills</p>
+            {:else}
+              <p>• Read questions carefully</p>
+              <p>• Take your time to think</p>
+              <p>• Learn from explanations</p>
+            {/if}
+          </div>
+        </div>
+        
+        <!-- Close Button -->
+        <div class="mt-6 text-center">
+          <button
+            onclick={closeHelp}
+            class="bg-gradient-to-r {selectedHelpGame.gradient} text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-semibold"
+          >
+            Got it!
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 {/if}

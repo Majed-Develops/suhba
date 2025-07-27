@@ -1833,6 +1833,94 @@ export const newGameContent = {
         reward: 75
       }
     ]
+  },
+
+  // Last Scholar Standing - Progressive elimination game
+  lastScholarStanding: {
+    questions: [
+      {
+        prompt: "What is the first pillar of Islam?",
+        prompt_ar: "ما هو الركن الأول من أركان الإسلام؟",
+        options: ["Prayer", "Fasting", "Shahada", "Zakat"],
+        options_ar: ["الصلاة", "الصوم", "الشهادة", "الزكاة"],
+        correct: 2,
+        explanation: "The Shahada (declaration of faith) is the first and fundamental pillar of Islam.",
+        explanation_ar: "الشهادة هي الركن الأول والأساسي من أركان الإسلام.",
+        difficulty: "easy",
+        category: "pillars"
+      },
+      {
+        prompt: "How many surahs are in the Quran?",
+        prompt_ar: "كم عدد سور القرآن؟",
+        options: ["114", "113", "115", "112"],
+        options_ar: ["114", "113", "115", "112"],
+        correct: 0,
+        explanation: "The Quran contains 114 surahs (chapters).",
+        explanation_ar: "يحتوي القرآن على 114 سورة.",
+        difficulty: "medium",
+        category: "quran"
+      }
+    ]
+  },
+
+  // Lightning Ijaza - Fast-paced buzzer game
+  lightningIjaza: {
+    questions: [
+      {
+        prompt: "Complete the verse: 'Bismillahi rabbee...'",
+        prompt_ar: "أكمل الآية: 'بسم الله ربي...'",
+        options: ["la shareeka lahu", "la hawla wa la quwwata illa billah", "la ilaha illa huwa", "tawakkaltu"],
+        options_ar: ["لا شريك له", "لا حول ولا قوة إلا بالله", "لا إله إلا هو", "توكلت"],
+        correct: 3,
+        explanation: "The complete phrase is 'Bismillahi rabbee tawakkaltu' (In the name of Allah, my Lord, I trust).",
+        explanation_ar: "العبارة الكاملة هي 'بسم الله ربي توكلت'.",
+        difficulty: "medium",
+        category: "adhkar"
+      }
+    ]
+  },
+
+  // Hadith Completion - Complete famous hadiths
+  hadithCompletion: {
+    hadiths: [
+      {
+        id: 1,
+        text: "Actions are but by intention and every man shall have but that which he intended.",
+        arabic: "إنما الأعمال بالنيات وإنما لكل امرئ ما نوى",
+        incomplete: "Actions are but by _______ and every man shall have but that which he _______.",
+        incompleteArabic: "إنما الأعمال _______ وإنما لكل امرئ ما _______",
+        blanks: ["intention", "intended"],
+        blanksArabic: ["بالنيات", "نوى"],
+        narrator: "Umar ibn al-Khattab",
+        source: "Bukhari & Muslim",
+        explanation: "This foundational hadith emphasizes that the value of actions lies in the intentions behind them.",
+        points: 10
+      }
+    ]
+  },
+
+  // Dawah Challenge - Explanation game
+  dawahChallenge: {
+    challenges: [
+      {
+        id: 1,
+        topic: "What is Islam?",
+        target: "child",
+        difficulty: "easy",
+        description: "Explain Islam to a 10-year-old child in simple, friendly terms",
+        tips: "Use simple words, analogies they understand, focus on love and kindness",
+        maxScore: 20
+      },
+      {
+        id: 2,
+        topic: "Why do Muslims pray 5 times a day?",
+        target: "non-muslim",
+        difficulty: "medium",
+        description: "Explain the daily prayers to someone who has never heard of Islam",
+        tips: "Connect to universal concepts, explain the spiritual and practical benefits",
+        maxScore: 25
+      }
+    ]
   }
 };
 

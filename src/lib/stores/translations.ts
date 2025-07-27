@@ -22,6 +22,8 @@ export const translations = {
     // Home Screen
     startGame: 'Start Game',
     chillTell: 'Chill & Tell',
+    tapToReveal: 'Tap to reveal',
+    discussThis: 'Discuss This',
     
     // Game Modes
     chooseGameMode: 'Choose Game Mode',
@@ -70,6 +72,26 @@ export const translations = {
     pillarFoundations: 'Pillar Foundations',
     seerahTrip: 'Seerah Trip',
     imanDefender: 'Iman Defender',
+    lastScholarStanding: 'Last Scholar Standing',
+    lightningIjaza: 'Lightning Ijaza',
+    hadithCompletion: 'Hadith Completion',
+    dawahChallenge: 'Dawah Challenge',
+    
+    // Game Descriptions
+    fiqhMasterDesc: 'Test your knowledge of Islamic jurisprudence and legal rulings.',
+    wisdomSeekerDesc: 'Explore the wisdom and teachings found in Islamic scholarship.',
+    chroniclesOfFaithDesc: 'Journey through the rich history and stories of Islam.',
+    hangmanDesc: 'Guess famous Islamic figures and personalities.',
+    tilawahTrailDesc: 'Master the beautiful recitation and verses of the Quran.',
+    seerahScenariosDesc: 'Navigate through pivotal moments in the Prophet\'s life.',
+    hadithLabDesc: 'Discover and analyze authentic sayings of Prophet Muhammad ﷺ.',
+    pillarFoundationsDesc: 'Strengthen your understanding of Islam\'s five pillars.',
+    seerahTripDesc: 'Embark on a spiritual journey through the Prophet\'s biography.',
+    imanDefenderDesc: 'Defend your faith against negative influences in this action game.',
+    lastScholarStandingDesc: 'Progressive elimination trivia - last player standing wins! Use power-ups to survive.',
+    lightningIjazaDesc: 'Fast-paced buzzer competition. First to buzz gets to answer!',
+    hadithCompletionDesc: 'Complete famous hadith by filling in the missing words. Learn authentic sayings.',
+    dawahChallengeDesc: 'Explain Islamic concepts to different audiences. Practice your dawah skills!',
     
     // New Games
     meccanMedinan: 'Meccan & Medinan',
@@ -208,6 +230,8 @@ export const translations = {
     // Home Screen
     startGame: 'ابدأ اللعبة',
     chillTell: 'استرخِ واحكِ',
+    tapToReveal: 'اضغط للكشف',
+    discussThis: 'ناقش هذا',
     
     // Game Modes
     chooseGameMode: 'اختر نمط اللعبة',
@@ -256,6 +280,26 @@ export const translations = {
     pillarFoundations: 'أساس الأركان',
     seerahTrip: 'رحلة السيرة',
     imanDefender: 'مدافع الإيمان',
+    lastScholarStanding: 'آخر عالم واقف',
+    lightningIjaza: 'إجازة البرق',
+    hadithCompletion: 'إكمال الحديث',
+    dawahChallenge: 'تحدي الدعوة',
+    
+    // Game Descriptions
+    fiqhMasterDesc: 'اختبر معرفتك بالفقه الإسلامي والأحكام الشرعية.',
+    wisdomSeekerDesc: 'استكشف الحكمة والتعاليم الموجودة في العلوم الإسلامية.',
+    chroniclesOfFaithDesc: 'رحلة عبر التاريخ الإسلامي الغني وقصص الإيمان.',
+    hangmanDesc: 'خمن الشخصيات والأعلام الإسلامية المشهورة.',
+    tilawahTrailDesc: 'أتقن التلاوة الجميلة وآيات القرآن الكريم.',
+    seerahScenariosDesc: 'تنقل عبر اللحظات المحورية في حياة النبي ﷺ.',
+    hadithLabDesc: 'اكتشف وحلل الأحاديث الصحيحة للنبي محمد ﷺ.',
+    pillarFoundationsDesc: 'قوّ فهمك لأركان الإسلام الخمسة.',
+    seerahTripDesc: 'انطلق في رحلة روحية عبر سيرة النبي ﷺ.',
+    imanDefenderDesc: 'دافع عن إيمانك ضد التأثيرات السلبية في هذه اللعبة.',
+    lastScholarStandingDesc: 'مسابقة إقصاء تدريجية - آخر لاعب واقف يفوز! استخدم القوى الخاصة للبقاء.',
+    lightningIjazaDesc: 'منافسة سريعة بالجرس. أول من يضغط يحصل على فرصة الإجابة!',
+    hadithCompletionDesc: 'أكمل الأحاديث الشهيرة بملء الكلمات المفقودة. تعلم الأحاديث الصحيحة.',
+    dawahChallengeDesc: 'اشرح المفاهيم الإسلامية لجماهير مختلفة. تدرب على مهارات الدعوة!',
     
     // New Games
     meccanMedinan: 'مكي ومدني',
