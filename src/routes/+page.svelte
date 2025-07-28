@@ -29,6 +29,7 @@
   import Button from '$lib/components/Button.svelte';
   import ToastContainer from '$lib/components/ToastContainer.svelte';
   import ConnectionStatus from '$lib/components/ConnectionStatus.svelte';
+  import InstallPrompt from '$lib/components/InstallPrompt.svelte';
   import { toastManager } from '$lib/stores/toast';
 
   // Reactive state using Svelte 5 runes
@@ -3210,4 +3211,7 @@
 {#if gameMode === 'team' || currentScreen === 'suhbaSelector' || currentScreen === 'roomLobby' || currentScreen === 'createRoomGameSelector'}
   <ConnectionStatus position="top-right" size="md" />
 {/if}
+
+<!-- PWA Install Prompt -->
+<InstallPrompt />
 
